@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /** Canonical 36-char UUID (the id shape Synchain stores for every record). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

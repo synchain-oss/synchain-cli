@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /** First-run welcome banner for the Synchain CLI. */
 
 export const WELCOME_TEXT = [
