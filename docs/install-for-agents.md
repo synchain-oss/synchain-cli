@@ -1,12 +1,18 @@
 # Synchain CLI for AI agents
 
 This is the quickstart for driving Synchain from an autonomous agent or CI job. For the
-full command reference, see [README.md](./README.md).
+full command reference, see [reference.md](./reference.md).
 
 ## 1. Install
 
 ```bash
-cd cli && npm install && npm run build && npm link
+npm install -g @synchain/cli
+```
+
+From source (development):
+
+```bash
+npm install && npm run build && npm link
 ```
 
 `synchain` is now on the PATH. (Node.js ≥ 20 required.)

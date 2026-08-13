@@ -14,7 +14,7 @@ npx @synchain/cli --help
 From source (development):
 
 ```bash
-cd cli && npm install && npm run build && npm link
+npm install && npm run build && npm link
 ```
 
 Requires Node.js ≥ 20.
@@ -49,4 +49,4 @@ lists the project roster (read-only) and requires the `members` scope to be enab
 - Discussion posts made through a CLI key are stamped `is_ai_generated=true` and show an
   `[AI]` badge in the web UI.
 
-Full guide: [`docs/cli/README.md`](https://github.com/DLsnows/Synchain/blob/dev/docs/cli/README.md).
+Full guide: [`docs/reference.md`](https://github.com/synchain-oss/synchain-cli/blob/dev/docs/reference.md).
