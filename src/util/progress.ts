@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Minimal \r-overwriting byte progress for uploads/downloads. Skips entirely
  * when the stream is not a TTY (clean log output in CI).

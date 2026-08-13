@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { CALENDAR_HELP } from "./calendar.js";
 import { DISCUSSION_HELP } from "./discussion.js";

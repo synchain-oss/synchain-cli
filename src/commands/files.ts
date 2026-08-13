@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { promises as fs, createReadStream, createWriteStream } from "node:fs";
 import * as path from "node:path";

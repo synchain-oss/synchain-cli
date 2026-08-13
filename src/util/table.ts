@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Minimal ASCII table renderer. Auto-fits column widths to the widest cell
  * (clamped to MAX_CELL_WIDTH). Longer cells are truncated with an ellipsis.

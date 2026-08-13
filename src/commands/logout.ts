@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { clearConfig, loadConfig } from "../config.js";
 import { promptConfirm } from "../util/prompt.js";

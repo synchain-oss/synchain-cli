@@ -1,0 +1,23 @@
+# gitleaks 配置 — Synchain CLI
+# 版本钉见 .gitleaks-version(与 .juce-version / .pluginval-version 同模式,06 §3.10 / 09 §1.6)。
+
+title = "gitleaks config — Synchain CLI"
+
+# 继承 gitleaks 默认规则集(generic-api-key / github-pat / aws / private-key 等)
+[extend]
+useDefault = true
+
+# [allowlist] 是必需项,不是可选项(09 §1.6):CLI 的公开文档故意出现
+# synch_live_sk_ 凭据占位形态,不放行则首跑必红。误报逐条登记并写明理由,
+# 不得用 --no-verify 绕过。
+[allowlist]
+  description = "文档故意出现的凭据占位形态 + LICENSES 高熵文本(非真实凭据)"
+  # 按整行匹配:占位串后跟 <…>/…/*/xxx/placeholder,真实 key 是 48 位 hex,不会被本正则命中
+  regexTarget = "line"
+  regexes = [
+    '''synch_live_sk_(\*|<|…|xxx|placeholder)''',
+  ]
+  # LICENSES/MIT.txt 是 MIT 许可证全文,高熵段会触发 generic/high-entropy 误报
+  paths = [
+    '''LICENSES/''',
+  ]
