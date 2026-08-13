@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { apiFetch, ApiError, type ApiFetchOptions } from "../api.js";
+import {
+  apiFetch,
+  ApiError,
+  formatApiError,
+  resolveActiveProject,
+  wantsJson,
+  type ApiFetchOptions,
+} from "../api.js";
 
 // (内部编号) (内部编号) item10 / (内部编号): api.ts had zero implementation-level coverage.
 // These pin apiFetch's networked contract with a stubbed fetch — the Authorization
@@ -107,7 +114,7 @@ describe("apiFetch", () => {
           headers: { "content-type": "application/json" },
         })
     );
-    const err = await apiFetch("/api/thing", opts({ token: "t" })).catch((e) => e);
+    const err = (await apiFetch("/api/thing", opts({ token: "t" })).catch((e) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(400);
     expect(err.url).toBe("https://api.test/api/thing");
@@ -118,7 +125,7 @@ describe("apiFetch", () => {
     stubFetch(
       () => new Response("boom", { status: 500, headers: { "content-type": "text/plain" } })
     );
-    const err = await apiFetch("/api/x", opts({ token: "t" })).catch((e) => e);
+    const err = (await apiFetch("/api/x", opts({ token: "t" })).catch((e) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(500);
     expect(err.body).toBe("boom");
@@ -136,5 +143,120 @@ describe("apiFetch", () => {
       /insecure http/i
     );
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiFetch body + header handling", () => {
+  it("JSON-encodes a body and sets Content-Type on POST", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch("/api/thing", opts({ method: "POST", body: { a: 1 }, token: null }));
+    const init = spy.mock.calls[0]![1]!;
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ a: 1 }));
+    expect(init.headers?.["Content-Type"]).toBe("application/json");
+  });
+
+  it("passes rawBody through verbatim without JSON encoding", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch(
+      "/api/thing",
+      opts({ method: "PUT", rawBody: true, body: "raw-bytes", token: null })
+    );
+    const init = spy.mock.calls[0]![1]!;
+    expect(init.body).toBe("raw-bytes");
+    expect(init.headers?.["Content-Type"]).toBeUndefined();
+  });
+
+  it("does not override a caller-supplied Content-Type header", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch(
+      "/api/thing",
+      opts({ method: "POST", body: { a: 1 }, headers: { "Content-Type": "application/custom" }, token: null })
+    );
+    const init = spy.mock.calls[0]![1]!;
+    expect(init.headers?.["Content-Type"]).toBe("application/custom");
+  });
+
+  it("does not override a caller-supplied Authorization header", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch(
+      "/api/thing",
+      opts({ token: "synch_live_sk_x", headers: { Authorization: "Bearer custom" } })
+    );
+    const init = spy.mock.calls[0]![1]!;
+    expect(init.headers?.["Authorization"]).toBe("Bearer custom");
+  });
+
+  it("attaches a default AbortSignal when none is provided", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch("/api/thing", { baseUrl: BASE, token: null });
+    const init = spy.mock.calls[0]![1]!;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("treats a non-2xx response with unparseable JSON as a null body", async () => {
+    stubFetch(
+      () => new Response("{not-json", { status: 502, headers: { "content-type": "application/json" } })
+    );
+    const err = (await apiFetch("/api/x", opts({ token: "t" })).catch((e) => e)) as ApiError;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.body).toBeNull();
+  });
+
+  it("allows an absolute http loopback URL (local dev)", async () => {
+    const spy = stubFetch(() => new Response(null, { status: 204 }));
+    await apiFetch("http://localhost:3000/x", opts({ token: null }));
+    expect(spy.mock.calls[0]![0]).toBe("http://localhost:3000/x");
+  });
+});
+
+describe("resolveActiveProject", () => {
+  it("prefers the --project flag", () => {
+    expect(resolveActiveProject({ activeProject: { id: "cfg-id" } }, "flag-id")).toBe("flag-id");
+  });
+
+  it("falls back to config.activeProject.id", () => {
+    expect(resolveActiveProject({ activeProject: { id: "cfg-id" } }, undefined)).toBe("cfg-id");
+  });
+
+  it("throws when no project is selected", () => {
+    expect(() => resolveActiveProject(null, undefined)).toThrow(/No project selected/);
+    expect(() => resolveActiveProject({}, "")).toThrow(/No project selected/);
+  });
+});
+
+describe("formatApiError", () => {
+  it("formats an ApiError with a string body", () => {
+    expect(formatApiError(new ApiError(404, "https://x", "not found"))).toBe(
+      "API error 404 https://x\n  not found"
+    );
+  });
+
+  it("formats an ApiError with an object body as JSON", () => {
+    expect(formatApiError(new ApiError(422, "https://x", { error: "bad" }))).toBe(
+      'API error 422 https://x\n  {"error":"bad"}'
+    );
+  });
+
+  it("formats an ApiError with no body", () => {
+    expect(formatApiError(new ApiError(500, "https://x", undefined))).toBe(
+      "API error 500 https://x"
+    );
+  });
+
+  it("returns the message for a generic Error", () => {
+    expect(formatApiError(new Error("boom"))).toBe("boom");
+  });
+
+  it("stringifies non-Error values", () => {
+    expect(formatApiError("oops")).toBe("oops");
+  });
+});
+
+describe("wantsJson", () => {
+  it("returns true only when the json flag is set", () => {
+    expect(wantsJson({ json: true })).toBe(true);
+    expect(wantsJson({})).toBe(false);
+    expect(wantsJson(undefined)).toBe(false);
   });
 });
