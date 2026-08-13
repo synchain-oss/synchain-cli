@@ -40,12 +40,10 @@ import {
 import { runNotificationsLs, runNotificationsRead } from "./commands/notifications.js";
 import { runMembersLs } from "./commands/members.js";
 import { runHelp } from "./commands/help.js";
+import { DOCS_AGENTS, DOCS_README } from "./constants.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
-
-const DOCS_AGENTS = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/install-for-agents.md";
-const DOCS_README = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/README.md";
 
 function buildProgram(): Command {
   const program = new Command();

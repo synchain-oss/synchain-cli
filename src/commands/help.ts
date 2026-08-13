@@ -2,6 +2,7 @@ import pc from "picocolors";
 import { CALENDAR_HELP } from "./calendar.js";
 import { DISCUSSION_HELP } from "./discussion.js";
 import { MEMBERS_HELP } from "./members.js";
+import { DOCS_AGENTS, DOCS_README } from "../constants.js";
 
 interface Topic {
   name: string;
@@ -99,9 +100,6 @@ const TOPICS: Record<string, Topic> = {
     ].join("\n"),
   },
 };
-
-const DOCS_AGENTS = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/install-for-agents.md";
-const DOCS_README = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/README.md";
 
 const HEADER = [
   "synchain — CLI for the Synchain platform",
