@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";

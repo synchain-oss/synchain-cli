@@ -297,8 +297,9 @@ and print a human-readable message to stderr.
 
 - **`Login failed: invalid CLI key.`** — the key is wrong or was revoked (regenerating a
   key revokes the previous one). Generate a fresh key in Settings.
-- **`Login failed: /api/user/me not found.`** — the server predates the CLI auth
-  endpoints; deploy the branch that adds them.
+- **`Login failed: /api/user/me not found.`** — the server deployment predates the
+  CLI auth endpoints. Use a current Synchain deployment, or contact your server
+  administrator.
 - **`403 scope_denied` / `403 project_scope_denied`** — enable the scope in Settings
   (account) or ask a project admin to enable it (project).
 - **`No project selected.`** — run `synchain project use <id>` or pass `--project <id>`.
