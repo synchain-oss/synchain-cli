@@ -8,14 +8,13 @@
     "music",
     "collaboration"
   ],
-  "homepage": "https://github.com/DLsnows/Synchain/tree/dev/cli",
+  "homepage": "https://github.com/synchain-oss/synchain-cli#readme",
   "bugs": {
-    "url": "https://github.com/DLsnows/Synchain/issues"
+    "url": "https://github.com/synchain-oss/synchain-cli/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DLsnows/Synchain.git",
-    "directory": "cli"
+    "url": "git+https://github.com/synchain-oss/synchain-cli.git"
   },
   "license": "MIT",
   "type": "module",
@@ -34,7 +33,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gates": "npm run typecheck && npm run test -- --coverage && npm run build && npm pack --dry-run && npm audit --audit-level=high"
   },
   "engines": {
     "node": ">=20"
