@@ -1,0 +1,55 @@
+{
+  "name": "@synchain/cli",
+  "version": "0.3.0",
+  "description": "CLI for the Synchain platform — manage project files, calendar, discussion, and members from your terminal.",
+  "keywords": [
+    "synchain",
+    "cli",
+    "music",
+    "collaboration"
+  ],
+  "homepage": "https://github.com/DLsnows/Synchain/tree/dev/cli",
+  "bugs": {
+    "url": "https://github.com/DLsnows/Synchain/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DLsnows/Synchain.git",
+    "directory": "cli"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "synchain": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "mime-types": "^2.1.35",
+    "picocolors": "^1.1.1",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20",
+    "@types/prompts": "^2.4.9",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
