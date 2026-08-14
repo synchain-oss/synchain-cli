@@ -138,7 +138,8 @@ export function runHelp(topic: string | undefined): void {
   if (!t) {
     console.error(pc.red(`Unknown help topic: ${topic}`));
     console.error(`Available topics: ${Object.keys(TOPICS).join(", ")}`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   console.log(`${pc.bold(t.name)} — ${t.summary}`);
   console.log("");
