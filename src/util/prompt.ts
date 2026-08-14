@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import prompts from "prompts";
 
 /** Prompts for a password with no echo. Returns "" if the user aborts. */

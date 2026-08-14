@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig, saveConfig } from "../config.js";
@@ -42,7 +43,8 @@ export async function runProjectLs(flags: ProjectLsFlags): Promise<void> {
     );
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -50,7 +52,8 @@ export async function runProjectUse(input: string): Promise<void> {
   const cfg = await loadConfig();
   if (!cfg?.token) {
     console.error(pc.red("Not logged in. Run `synchain login`."));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   try {
@@ -65,6 +68,7 @@ export async function runProjectUse(input: string): Promise<void> {
     console.log(pc.green(`Active project set to ${resolved.name} (${resolved.id.slice(0, 8)}).`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }

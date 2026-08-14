@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { promises as fs } from "node:fs";
 import { existsSync } from "node:fs";
 import * as path from "node:path";

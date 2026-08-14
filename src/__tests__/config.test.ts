@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// SPDX-License-Identifier: MIT
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -65,5 +66,67 @@ describe("config", () => {
     await mod.saveConfig({ baseUrl: "https://x.test", token: "t" });
     await mod.clearConfig();
     expect(await mod.loadConfig()).toBeNull();
+  });
+
+  it("getConfigPath and getWelcomeSentinelPath live under the config dir", async () => {
+    const mod = await import("../config.js");
+    expect(mod.getConfigPath()).toBe(path.join(mod.getConfigDir(), "config.json"));
+    expect(mod.getWelcomeSentinelPath()).toBe(path.join(mod.getConfigDir(), ".welcomed"));
+  });
+
+  it("markWelcomeSeen writes the sentinel and flips isFirstRun", async () => {
+    const mod = await import("../config.js");
+    expect(mod.isFirstRun()).toBe(true);
+    await mod.markWelcomeSeen();
+    expect(mod.isFirstRun()).toBe(false);
+    const sentinel = mod.getWelcomeSentinelPath();
+    expect((await fs.readFile(sentinel, "utf8")).length).toBeGreaterThan(0);
+  });
+
+  it("loadConfig warns and returns null on corrupt JSON", async () => {
+    const mod = await import("../config.js");
+    const p = mod.getConfigPath();
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, "{not valid json", "utf8");
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await mod.loadConfig()).toBeNull();
+      expect(write).toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("clearConfig rethrows non-ENOENT errors", async () => {
+    const mod = await import("../config.js");
+    const spy = vi
+      .spyOn(fs, "unlink")
+      .mockRejectedValue(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+    try {
+      await expect(mod.clearConfig()).rejects.toThrow("EACCES");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("saveConfig creates a 0600 file on POSIX", async () => {
+    const mod = await import("../config.js");
+    if (process.platform === "win32") return; // chmod semantics differ; covered on Linux CI
+    await mod.saveConfig({ baseUrl: "https://x.test", token: "t" });
+    const stat = await fs.stat(mod.getConfigPath());
+    expect(stat.mode & 0o777).toBe(0o600);
+  });
+
+  it("getConfigDir honors XDG_CONFIG_HOME on POSIX", async () => {
+    const mod = await import("../config.js");
+    if (process.platform === "win32") return;
+    const prev = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = path.join(tmpDir, "xdg");
+    try {
+      expect(mod.getConfigDir()).toBe(path.join(tmpDir, "xdg", "synchain"));
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prev;
+    }
   });
 });

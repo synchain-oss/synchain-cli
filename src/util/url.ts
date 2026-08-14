@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Base-URL safety guard. A Synchain CLI key (`synch_live_sk_…`) is a
  * service-role-grade bearer, so it must never leave the machine over cleartext

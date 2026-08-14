@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -40,12 +41,10 @@ import {
 import { runNotificationsLs, runNotificationsRead } from "./commands/notifications.js";
 import { runMembersLs } from "./commands/members.js";
 import { runHelp } from "./commands/help.js";
+import { DOCS_AGENTS, DOCS_README } from "./constants.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
-
-const DOCS_AGENTS = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/install-for-agents.md";
-const DOCS_README = "https://github.com/DLsnows/Synchain/blob/dev/docs/cli/README.md";
 
 function buildProgram(): Command {
   const program = new Command();
@@ -339,7 +338,7 @@ function buildProgram(): Command {
 export async function main(argv: string[] = process.argv): Promise<void> {
   // First-run welcome banner —— 仅在【交互式且非 --json】时打印，且只在真正打印后才落 sentinel。
   // banner 走 stderr（见 welcome.ts），据 stderr 是否为终端判定：--json/管道/重定向时完全不打印、
-  // 也不消费 first-run（让人类首次交互运行仍能看到 banner，同时绝不污染 stdout/--json）（(内部编号)）。
+  // 也不消费 first-run（让人类首次交互运行仍能看到 banner，同时绝不污染 stdout/--json）。
   const wantsJson = argv.includes("--json");
   if (isFirstRun() && process.stderr.isTTY === true && !wantsJson) {
     printWelcomeBanner();
@@ -370,7 +369,10 @@ const invokedAsScript = (() => {
 if (invokedAsScript) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
-    process.exit(1);
+    // 不用 process.exit(1):强制退出会跳过事件循环排水,undici 连接/uv handle 在 Windows 上
+    // 触发 libuv 竞态断言(C10 exit-crash)。设 exitCode 让事件循环排空后按码自然退出。
+    process.exitCode = 1;
+    return;
   });
 }
 

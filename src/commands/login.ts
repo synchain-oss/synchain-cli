@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";
@@ -36,7 +37,8 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     baseUrl = await promptText("Base URL", { initial: existing.baseUrl ?? DEFAULT_BASE_URL });
     if (!baseUrl) {
       console.error(pc.red("Login cancelled."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   }
   baseUrl = baseUrl.replace(/\/+$/, "");
@@ -46,7 +48,8 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     assertSafeBaseUrl(baseUrl);
   } catch (e) {
     console.error(pc.red(e instanceof Error ? e.message : String(e)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   // Resolve the CLI key. Precedence:
@@ -59,7 +62,8 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     token = await promptPassword("CLI key (input hidden, from Settings → CLI Access)");
     if (!token) {
       console.error(pc.red("Login cancelled."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   }
 
@@ -91,6 +95,7 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     } else {
       console.error(pc.red(`Login failed: ${formatApiError(err)}`));
     }
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }

@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: MIT
 import { describe, expect, it, vi } from "vitest";
+
+import { REPO_URL } from "../constants.js";
 
 // Stub the command modules whose side effects we don't want during parsing.
 vi.mock("../commands/files.js", () => ({
@@ -173,5 +176,20 @@ describe("commander parsing", () => {
     const calls = (calMod.runCalendarAdd as Mock).mock.calls;
     const call = calls[calls.length - 1]!;
     expect(call[0]).toMatchObject({ tag: "custom", customTag: "Tracking", title: "Session" });
+  });
+
+  it("--help output points at the new repo (REPO_URL)", async () => {
+    const { buildProgram } = await import("../index.js");
+    const program = buildProgram();
+    program.exitOverride();
+    let out = "";
+    program.configureOutput({
+      writeOut: (str: string) => {
+        out += str;
+      },
+      writeErr: () => {},
+    });
+    await expect(program.parseAsync(["node", "synchain", "--help"])).rejects.toThrow();
+    expect(out).toContain(REPO_URL);
   });
 });

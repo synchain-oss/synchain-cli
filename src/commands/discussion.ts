@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
@@ -114,7 +115,7 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
 
   const aiTag = (p: DiscussionPost) => (p.isAiGenerated ? " [AI]" : "");
   const lines: string[] = [];
-  // (内部编号) 消毒服务端字段：单行头用 sanitizeInline（防注入换行伪造连接线/缩进），正文用
+  // 消毒服务端字段：单行头用 sanitizeInline（防注入换行伪造连接线/缩进），正文用
   // sanitizeBlock（保留多行结构、去 ANSI/CR/控制字符）。aiTag/connector/indent 是 CLI 生成、安全。
   lines.push(
     `${sanitizeInline(root.title)}${aiTag(root)} — by ${sanitizeInline(root.authorName)} @ ${sanitizeInline(root.createdAt)}`
@@ -123,7 +124,7 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
   lines.push(sanitizeBlock(root.content));
   lines.push("-----");
 
-  // 任意深度嵌套（撤销 (内部编号) 两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
+  // 任意深度嵌套（撤销两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
   // 导致无限递归（Web 两处 buildReplyTree/fetchProjectDiscussion 已各有防环）。
   const visited = new Set<string>();
   function walk(parent: DiscussionPost, depth: number): void {
@@ -226,7 +227,8 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
     if (footer) console.log(pc.dim(footer));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -276,7 +278,8 @@ export async function runDiscussionRead(postId: string, flags: DiscussionFlags):
     console.log(renderThread(effectiveRoot, posts));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -306,14 +309,16 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
   try {
     if (!flags.title || !flags.title.trim()) {
       console.error(pc.red("--title is required and must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const category = validateCategory(flags.category);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
       console.error(pc.red("--content must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const created = await apiFetch<CreatedRow>(
@@ -329,7 +334,8 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -343,10 +349,11 @@ export async function runDiscussionReply(
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
       console.error(pc.red("--content must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
-    // (内部编号) item9: a full UUID posts directly — only an 8-char prefix needs the
+    // a full UUID posts directly — only an 8-char prefix needs the
     // full-thread fetch (discussion has no single-post GET to resolve against).
     // The server's zod schema rejects non-UUIDs and the POST validates that the
     // parent exists (its 404 is handled below), so no client-side pre-check is lost.
@@ -368,16 +375,17 @@ export async function runDiscussionReply(
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       console.error(pc.red(`Parent post ${parentPostId} not found.`));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (err instanceof Error && /No post matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
