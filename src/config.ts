@@ -108,3 +108,4 @@ export async function markWelcomeSeen(): Promise<void> {
 
 /** Default Synchain host. Overridable per-login via `--base-url`. */
 export const DEFAULT_BASE_URL = "https://synchain.vercel.app";
+// test: DCO negative (deliberately no Signed-off-by)
