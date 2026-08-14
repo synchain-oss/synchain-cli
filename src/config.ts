@@ -108,3 +108,8 @@ export async function markWelcomeSeen(): Promise<void> {
 
 /** Default Synchain host. Overridable per-login via `--base-url`. */
 export const DEFAULT_BASE_URL = "https://synchain.vercel.app";
+// compliance test: fake private key (deliberate gitleaks hit)
+// -----BEGIN RSA PRIVATE KEY-----
+// MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu
+// KUpRKfFLfRYC9AIKjbJTWit+CqvjWYzvQwIDAQAB
+// -----END RSA PRIVATE KEY-----
