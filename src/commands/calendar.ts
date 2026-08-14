@@ -114,28 +114,33 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
   try {
     if (!flags.title || !flags.title.trim()) {
       console.error(pc.red("--title is required."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     if (!flags.start) {
       console.error(pc.red("--start is required."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     if (!flags.end) {
       console.error(pc.red("--end is required."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const tag = validateTag(flags.tag);
     if (tag === "custom" && !flags.customTag?.trim()) {
       console.error(pc.red("--custom-tag is required when --tag is custom."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const startTime = parseDateInput(flags.start!);
     const endTime = parseDateInput(flags.end!);
     if (new Date(endTime) <= new Date(startTime)) {
       console.error(pc.red("End time must be after start time."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const body: Record<string, unknown> = { title: flags.title!.trim(), startTime, endTime, tag };
@@ -158,7 +163,8 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -210,7 +216,8 @@ export async function runCalendarLs(flags: CalendarFlags): Promise<void> {
     );
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -255,7 +262,8 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
           "Nothing to update — pass at least one of --title, --start, --end, --desc, --tag, --custom-tag."
         )
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Synchain's PATCH validates the FULL event body, so merge changes onto the
@@ -265,13 +273,15 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     const endTime = flags.end !== undefined ? parseDateInput(flags.end) : event.endTime;
     if (new Date(endTime) <= new Date(startTime)) {
       console.error(pc.red("End time must be after start time."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     const customTag =
       flags.customTag !== undefined ? flags.customTag.trim() : (event.customTag ?? undefined);
     if (tag === "custom" && !customTag) {
       console.error(pc.red("--custom-tag is required when the tag is custom."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     // Guard the inverse: --custom-tag on a non-custom event would be silently dropped
     // from the PATCH body below yet still print "Updated" — a false success. Fail loudly.
@@ -282,7 +292,8 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
             "Pass --tag custom together with --custom-tag."
         )
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const body: Record<string, unknown> = {
@@ -308,16 +319,17 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       console.error(pc.red("Only the creator or a project admin can edit this event."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (err instanceof Error && /No event matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -339,7 +351,7 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       console.error(pc.red("Only the creator or a project admin can delete this event."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     // The full-UUID short-circuit hits DELETE without resolving first, so a missing
@@ -347,16 +359,17 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
     // matches". Map it to the same friendly message the prefix path prints.
     if (err instanceof ApiError && err.status === 404) {
       console.error(pc.red(`No event matches "${eventId}".`));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (err instanceof Error && /No event matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 

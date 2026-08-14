@@ -135,11 +135,12 @@ export async function runFoldersLs(
   } catch (err) {
     if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -163,11 +164,12 @@ export async function runFoldersMkdir(name: string, flags: FoldersFlags): Promis
   } catch (err) {
     if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -186,17 +188,18 @@ export async function runFoldersRm(folderId: string, flags: FoldersFlags): Promi
       const body = err.body as { error?: string } | null;
       if (body?.error === "folder_not_empty") {
         console.error(pc.red(`Folder is not empty. Delete its files / sub-folders first.`));
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
     }
     if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -211,17 +214,17 @@ export async function runFoldersRename(
 
     if (!newName || newName.length === 0) {
       console.error(pc.red("New name cannot be empty."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (newName.length > 200) {
       console.error(pc.red("New name is too long (max 200 chars)."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (FOLDER_NAME_FORBIDDEN_RE.test(newName)) {
       console.error(pc.red("Invalid name — no path separators or control characters."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
 
@@ -240,15 +243,16 @@ export async function runFoldersRename(
   } catch (err) {
     if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (err instanceof ApiError && err.status === 404) {
       console.error(pc.red(`Folder ${folderId} not found.`));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }

@@ -369,7 +369,10 @@ const invokedAsScript = (() => {
 if (invokedAsScript) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
-    process.exit(1);
+    // 不用 process.exit(1):强制退出会跳过事件循环排水,undici 连接/uv handle 在 Windows 上
+    // 触发 libuv 竞态断言(C10 exit-crash)。设 exitCode 让事件循环排空后按码自然退出。
+    process.exitCode = 1;
+    return;
   });
 }
 
