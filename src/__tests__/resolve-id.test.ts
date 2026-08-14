@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 
-// (内部编号) (内部编号): `discussion read` previously used find(startsWith) and would
+// `discussion read` previously used find(startsWith) and would
 // silently pick the first prefix hit; it now shares resolveByPrefix with the other
 // commands. Pin the three resolution branches so that behaviour can't regress.
 const rows = [
@@ -41,7 +41,7 @@ describe("resolveByPrefix", () => {
 });
 
 describe("isUuid", () => {
-  // (内部编号) item9: commands short-circuit the project-wide fetch when the input is
+  // commands short-circuit the project-wide fetch when the input is
   // already a full UUID, so this predicate must accept canonical UUIDs and reject
   // the 8-char prefixes / partials the same commands also take.
   it("accepts a canonical 36-char UUID (any case)", () => {

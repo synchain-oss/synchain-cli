@@ -232,7 +232,7 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
   const cfg = await loadConfig();
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
-    // (内部编号) item9: edit always needs the full event record (the PATCH re-validates
+    // edit always needs the full event record (the PATCH re-validates
     // the whole body, so we merge changes onto the current values), and schedule
     // exposes no single-event GET — a full UUID can't short-circuit the window
     // fetch here. rm, which needs only the id, does short-circuit (see runCalendarRm).
@@ -325,7 +325,7 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
   const cfg = await loadConfig();
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
-    // (内部编号) item9: a full UUID is DELETE-able directly — only an 8-char prefix
+    // a full UUID is DELETE-able directly — only an 8-char prefix
     // needs the ±1yr window fetch (schedule has no single-event GET to resolve
     // against, so a prefix still has to be matched client-side).
     const resolvedId = isUuid(eventId)

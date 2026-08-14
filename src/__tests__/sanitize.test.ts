@@ -4,7 +4,7 @@ import { sanitizeInline, sanitizeBlock } from "../util/sanitize.js";
 
 // Security-critical: these strip terminal-escape sequences from untrusted
 // server strings before they are printed. A regex regression here silently
-// reopens the ANSI/terminal-escape injection ((内部编号)), so the escape-stripping
+// reopens the ANSI/terminal-escape injection, so the escape-stripping
 // behaviour is pinned by these tests.
 describe("sanitizeInline", () => {
   it("strips CSI escapes (colors, cursor, erase)", () => {

@@ -141,7 +141,7 @@ async function fetchAllFilesInProject(projectId: string): Promise<FileDTO[]> {
 /**
  * Resolve a file id (full UUID or 8-char prefix) to its full record.
  *
- * (内部编号) item9: this still walks the whole project even for a full UUID, because
+ * this still walks the whole project even for a full UUID, because
  * mv/rm/rename need the record's `name` (for their confirmations, success lines
  * and the rename extension check) and the only single-file endpoint
  * (`GET /files/[fileId]`) streams the bytes rather than returning metadata — there
@@ -340,7 +340,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
   const cfg = await loadConfig();
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
-    // (内部编号) item9: a full UUID hits the file endpoint directly; only an 8-char
+    // a full UUID hits the file endpoint directly; only an 8-char
     // prefix needs the project-wide walk. The endpoint carries the authoritative
     // filename in Content-Disposition, so the DB name is only a fallback here.
     let downloadId: string;
