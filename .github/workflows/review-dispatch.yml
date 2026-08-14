@@ -65,7 +65,7 @@ jobs:
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ github.event.issue.number }}
             
             你在审查 Synchain CLI(`synchain`)—— 一个自包含 npm 包(Node ≥ 20),从终端管理 Synchain 平台的
             文件、日历、讨论、成员与通知,面向人类与 AI agent 两用。
