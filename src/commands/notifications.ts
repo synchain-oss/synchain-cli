@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
@@ -48,9 +49,9 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 
 /** One compact readable line per notification, including its id. Exported for tests. */
 export function formatNotificationLine(n: NotificationItem, now?: number): string {
-  // #186：projectName/entityTitle/actorName 是服务端来源的用户内容（项目名 / 讨论标题·文件名 /
+  // projectName/entityTitle/actorName 是服务端来源的用户内容（项目名 / 讨论标题·文件名 /
   // 作者名）。这条命令自建输出行，不经 util/table.ts 或 discussion.ts 的消毒汇聚点，故在此显式过
-  // sanitizeInline，去掉 ANSI 转义与控制字符，挫败同项目成员经这些字段发起的终端转义注入（同 #209）。
+  // sanitizeInline，去掉 ANSI 转义与控制字符，挫败同项目成员经这些字段发起的终端转义注入。
   const parts = [n.projectName, n.entityTitle, n.actorName]
     .filter((p): p is string => Boolean(p))
     .map((p) => sanitizeInline(p));
@@ -80,7 +81,8 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     console.log(pc.dim(`${res.unreadCount} unread`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -115,7 +117,7 @@ export async function runNotificationsRead(
 
     if (!id) {
       console.error(pc.red("Provide a notification id, or use --all to mark everything read."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
 
@@ -134,10 +136,11 @@ export async function runNotificationsRead(
   } catch (err) {
     if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }

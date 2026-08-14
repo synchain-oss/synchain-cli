@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { promises as fs, createReadStream, createWriteStream } from "node:fs";
 import * as path from "node:path";
@@ -140,7 +141,7 @@ async function fetchAllFilesInProject(projectId: string): Promise<FileDTO[]> {
 /**
  * Resolve a file id (full UUID or 8-char prefix) to its full record.
  *
- * #200 item9: this still walks the whole project even for a full UUID, because
+ * this still walks the whole project even for a full UUID, because
  * mv/rm/rename need the record's `name` (for their confirmations, success lines
  * and the rename extension check) and the only single-file endpoint
  * (`GET /files/[fileId]`) streams the bytes rather than returning metadata — there
@@ -208,7 +209,8 @@ export async function runFilesLs(flags: FilesFlags): Promise<void> {
     );
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -220,7 +222,8 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     const stat = await fs.stat(absPath);
     if (!stat.isFile()) {
       console.error(pc.red(`Not a regular file: ${absPath}`));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     // The server's upload-url schema rejects size=0 with an opaque "invalid_query";
     // pre-check here so an empty placeholder file gets a message that says why.
@@ -228,7 +231,8 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       console.error(
         pc.red(`Cannot upload an empty (0-byte) file: ${absPath} — empty files aren't supported.`)
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     const fileName = path.basename(absPath);
     const mimeType = mime.lookup(fileName) || "application/octet-stream";
@@ -271,7 +275,8 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       const text = await putRes.text().catch(() => "");
       progress.finish(`upload failed: HTTP ${putRes.status}`);
       console.error(pc.red(`Storage PUT failed: ${putRes.status} ${text}`));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     progress.finish(`uploaded ${fileName} (${formatBytes(stat.size)})`);
 
@@ -312,7 +317,8 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -339,7 +345,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
   const cfg = await loadConfig();
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
-    // #200 item9: a full UUID hits the file endpoint directly; only an 8-char
+    // a full UUID hits the file endpoint directly; only an 8-char
     // prefix needs the project-wide walk. The endpoint carries the authoritative
     // filename in Content-Disposition, so the DB name is only a fallback here.
     let downloadId: string;
@@ -439,18 +445,20 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
   } catch (err) {
     if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
 export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<void> {
   if (!flags.to) {
     console.error(pc.red("--to <folderId|root> is required"));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   const cfg = await loadConfig();
   try {
@@ -473,11 +481,12 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
   } catch (err) {
     if (err instanceof Error && /No (file|folder) matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -485,7 +494,8 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
   const cfg = await loadConfig();
   if (!cfg?.token) {
     console.error(pc.red("Not logged in. Run `synchain login`."));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
@@ -497,7 +507,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
     } catch (err) {
       if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
         console.error(pc.red(err.message));
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       throw err;
@@ -523,7 +533,8 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
     console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${resolved.id.slice(0, 8)}).`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -540,17 +551,17 @@ export async function runFilesRename(
     // The server has the final say (≤255 chars, forbidden chars, extension lock).
     if (!newName || newName.length === 0) {
       console.error(pc.red("New name cannot be empty."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (newName.length > 255) {
       console.error(pc.red("New name is too long (max 255 chars)."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (CLIENT_NAME_FORBIDDEN_RE.test(newName)) {
       console.error(pc.red("Invalid name — no path separators or control characters."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
 
@@ -560,7 +571,7 @@ export async function runFilesRename(
     } catch (err) {
       if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
         console.error(pc.red(err.message));
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       throw err;
@@ -595,18 +606,19 @@ export async function runFilesRename(
         console.error(
           pc.red("Extension cannot be changed. Use the same extension as the original.")
         );
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       if (err instanceof ApiError && err.status === 404) {
         console.error(pc.red(`File ${resolved.id} not found.`));
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       throw err;
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }

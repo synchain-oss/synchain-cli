@@ -1,6 +1,6 @@
 {
   "name": "@synchain/cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "CLI for the Synchain platform — manage project files, calendar, discussion, and members from your terminal.",
   "keywords": [
     "synchain",
@@ -8,14 +8,13 @@
     "music",
     "collaboration"
   ],
-  "homepage": "https://github.com/DLsnows/Synchain/tree/dev/cli",
+  "homepage": "https://github.com/synchain-oss/synchain-cli#readme",
   "bugs": {
-    "url": "https://github.com/DLsnows/Synchain/issues"
+    "url": "https://github.com/synchain-oss/synchain-cli/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DLsnows/Synchain.git",
-    "directory": "cli"
+    "url": "git+https://github.com/synchain-oss/synchain-cli.git"
   },
   "license": "MIT",
   "type": "module",
@@ -31,10 +30,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gates": "npm run typecheck && npm run test -- --coverage && npm run build && npm pack --dry-run && npm audit --audit-level=high"
   },
   "engines": {
     "node": ">=20"
@@ -49,6 +49,7 @@
     "@types/mime-types": "^2.1.4",
     "@types/node": "^20",
     "@types/prompts": "^2.4.9",
+    "@vitest/coverage-v8": "^3.2.7",
     "typescript": "^5",
     "vitest": "^3"
   }

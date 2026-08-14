@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 

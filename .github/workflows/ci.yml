@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [dev, 'feature/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read          # 本 workflow 不读任何 secrets → fork PR 可安全运行(J31)
+
+jobs:
+  # 矩阵 = 三格(07 C04 交付物字段为准):ubuntu-latest × node 20/22 + windows-latest × node 20
+  checks:
+    name: checks (node ${{ matrix.node }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node: ['20', '22']              # engines: >=20
+        include:
+          - os: windows-latest          # CLI 有路径/文件名处理逻辑,必须验 Windows
+            node: '20'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ matrix.node }}', cache: npm }
+      - run: npm ci
+      - run: npm run typecheck          # tsc --noEmit(覆盖测试文件)
+      - run: npm run test -- --coverage # vitest run + 覆盖率阈值(见 vitest.config.mts)
+      - run: npm run build              # tsc -p tsconfig.build.json → dist/
+
+  # smoke:打包内容与入口冒烟(无 needs、node 20)
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm }
+      - run: npm ci && npm run build
+      - name: Verify package contents
+        run: npm pack --dry-run         # 确认 dist/ 与 bin 入口在包里、不误打包 src/__tests__
+      - name: Smoke test built CLI
+        run: |
+          node dist/index.js --help > /tmp/h1.txt
+          node dist/index.js help   > /tmp/h2.txt
+          grep -q 'github.com/synchain-oss/synchain-cli' /tmp/h1.txt
+          grep -q 'github.com/synchain-oss/synchain-cli' /tmp/h2.txt
+          ! grep -q 'DLsnows' /tmp/h1.txt
+          ! grep -q 'DLsnows' /tmp/h2.txt
+
+  # no-stale-refs:09 §2.2 四条 grep,作为持续约束
+  # 四条例外:
+  #   ① CHANGELOG.md 排除(其职责就是叙述历史,必然出现旧串)
+  #   ② cd cli 用行首锚定 ^[[:space:]]*cd cli\b(只命中命令行,不误伤散文)
+  #   ③ 排除 .github/workflows/**:本 job 的三个模式串字面量就写在这个文件里,
+  #      若不排除,git grep 会命中 ci.yml 自身 → 永久红(检测器的自引用,不是陈旧引用)
+  #   ④ 排除 docs/contract-changes/**:冻结契约变更文档叙述历史(记录旧仓路径),与 CHANGELOG 同性质
+  no-stale-refs:
+    name: no-stale-refs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bad=0
+          for p in 'DLsnows/Synchain' 'UNLICENSED' 'docs/cli/'; do
+            if git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**' ':!docs/contract-changes/**' >/dev/null 2>&1; then
+              echo "::error::残留引用命中:$p"; git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**' ':!docs/contract-changes/**'; bad=1
+            fi
+          done
+          # `cd cli`:行首锚定 + 排除 CHANGELOG / 生成物目录
+          if grep -rnE '^[[:space:]]*cd cli\b' . \
+               --exclude=CHANGELOG.md --exclude-dir=.git \
+               --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=contract-changes >/dev/null 2>&1; then
+            echo "::error::残留引用命中:cd cli(命令行形式)"
+            grep -rnE '^[[:space:]]*cd cli\b' . --exclude=CHANGELOG.md --exclude-dir=.git \
+                 --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=contract-changes
+            bad=1
+          fi
+          exit $bad
+
+  # audit:供应链门禁(12 §2.4 硬约束),单独成 job,但必须进 cli-gate.needs
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm }
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  # compliance:gitleaks + reuse lint(R3/J53)。steps 逐字取 06 §3.10。
+  # 不进 npm run gates 字符串;无 secrets → fork PR 同样跑。
+  compliance:
+    name: compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read pinned gitleaks version
+        id: ver
+        run: echo "v=$(tr -d '[:space:]' < .gitleaks-version)" >> "$GITHUB_OUTPUT"
+      - name: Install gitleaks (pinned)
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${{ steps.ver.outputs.v }}/gitleaks_${{ steps.ver.outputs.v }}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Secret scan
+        run: gitleaks detect --no-git --source . --redact -v --config .gitleaks.toml
+      - name: REUSE lint
+        run: pipx run reuse lint
+
+  # 聚合 job:required check 只挂这一个;needs 必须列全五项,否则其它 job 红了照样能 merge
+  cli-gate:
+    name: cli-gate
+    needs: [checks, smoke, no-stale-refs, audit, compliance]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for r in "${{ needs.checks.result }}" "${{ needs.smoke.result }}" \
+                   "${{ needs.no-stale-refs.result }}" "${{ needs.audit.result }}" \
+                   "${{ needs.compliance.result }}"; do
+            echo "result: $r"
+            [ "$r" = "success" ] || exit 1
+          done

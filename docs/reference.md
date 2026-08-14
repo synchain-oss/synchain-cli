@@ -5,7 +5,7 @@ The `synchain` CLI manages Synchain project **files**, **calendar events**, and
 both humans and AI agents and talks to the same authenticated API the web app uses, via a
 per-user **CLI access key**.
 
-- Source: [`cli/`](../../cli) in this repo.
+- Source: [`src/`](../src) in this repo.
 - Agent-focused quickstart: [install-for-agents.md](./install-for-agents.md).
 
 ---
@@ -24,11 +24,11 @@ npx @synchain/cli --help
 
 ### From source (development)
 
-The CLI is a self-contained package under `cli/` (its own `package.json` / `tsconfig`,
+The CLI is a self-contained package in this repository (its own `package.json` / `tsconfig`,
 built with `tsc`). To run it straight from the repo:
 
 ```bash
-cd cli
+git clone https://github.com/synchain-oss/synchain-cli && cd synchain-cli
 npm install
 npm run build
 npm link          # exposes the `synchain` binary on your PATH
@@ -297,8 +297,9 @@ and print a human-readable message to stderr.
 
 - **`Login failed: invalid CLI key.`** — the key is wrong or was revoked (regenerating a
   key revokes the previous one). Generate a fresh key in Settings.
-- **`Login failed: /api/user/me not found.`** — the server predates the CLI auth
-  endpoints; deploy the branch that adds them.
+- **`Login failed: /api/user/me not found.`** — the server deployment predates the
+  CLI auth endpoints. Use a current Synchain deployment, or contact your server
+  administrator.
 - **`403 scope_denied` / `403 project_scope_denied`** — enable the scope in Settings
   (account) or ask a project admin to enable it (project).
 - **`No project selected.`** — run `synchain project use <id>` or pass `--project <id>`.
@@ -312,7 +313,6 @@ The package is `@synchain/cli` with `publishConfig.access = "public"` already se
 scoped package publishes privately by default). To cut a release:
 
 ```bash
-cd cli
 npm ci
 npm run build
 npm publish
@@ -321,9 +321,8 @@ npm publish
 Requirements & notes:
 
 - You must own (or be a member of) the **`@synchain`** npm scope. If you don't, either
-  create the org on npm or rename `name` in `cli/package.json` to your own scope
+  create the org on npm or rename `name` in `package.json` to your own scope
   (e.g. `@your-org/synchain-cli`) before publishing.
-- Bump `version` in `cli/package.json` per release (`npm version patch|minor|major`).
-- `license` is currently `UNLICENSED` as a safe placeholder — **the repo owner should
-  set the intended license** before a public release.
+- Bump `version` in `package.json` per release (`npm version patch|minor|major`).
+- Licensed under the **MIT License** (see [`LICENSE`](../LICENSE)); `package.json` already declares `"license": "MIT"`.
 - `files` ships only `dist/` + `README.md`; run `npm pack` first to preview the tarball.

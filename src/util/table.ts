@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Minimal ASCII table renderer. Auto-fits column widths to the widest cell
  * (clamped to MAX_CELL_WIDTH). Longer cells are truncated with an ellipsis.
@@ -23,7 +24,7 @@ function truncate(s: string, max: number): string {
 }
 
 // 所有表格单元（讨论 ls / 日历 ls / 文件 / 文件夹 / 项目 / 通知）的单一汇聚点：在此消毒
-// 服务端来源字符串，去掉 ANSI/控制字符并把换行折叠成空格（防转义注入 + 防换行破坏对齐）（#186）。
+// 服务端来源字符串，去掉 ANSI/控制字符并把换行折叠成空格（防转义注入 + 防换行破坏对齐）。
 // toCell 在宽度计算与渲染两处都先于 truncate 调用，故消毒后再量宽，对齐一致。
 function toCell(v: unknown): string {
   if (v == null) return "";

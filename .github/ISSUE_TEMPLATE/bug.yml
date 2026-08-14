@@ -1,0 +1,60 @@
+name: Bug 报告
+description: 报告一个缺陷(提交前请先搜索已有 issue)
+title: "[Bug] "
+labels: ["type/bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 出现问题的版本号
+      placeholder: "e.g. v0.3.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: "e.g. Windows 11 23H2 / macOS 14 / Ubuntu 22.04"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node 版本
+      description: 运行 node --version 的结果
+      placeholder: "e.g. v20.11.0"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: 命令全文(去掉 key 后)
+      description: 触发问题的完整命令。粘贴前请确认已移除 synch_live_sk_ 开头的凭据。
+      placeholder: "synchain files upload ./mix.wav --folder 8ab3"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: 错误输出
+      description: 命令的报错输出(stderr)。提交前请移除任何凭据。
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 打开 ...\n2. 点击 ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望 vs 实际
+      description: 期望发生什么,实际发生了什么
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息
+      description: 截图、日志、错误信息等(提交前请移除任何凭据)
