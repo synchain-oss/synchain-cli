@@ -73,8 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # fork PR 下也可用(只读足够)
         run: |
-          # 用 jq 直接筛出"消息里没有 Signed-off-by 行"的 commit,避免在 shell 里切多行 message
-          gh api --paginate "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits"             --jq '.[] | select((.commit.message | test("(?im)^Signed-off-by: .+ <.+@.+>$")) | not) | .sha' > dco-bad.txt
+          # 用 jq 直接筛出"消息里没有 Signed-off-by 行且作者 login 不以 [bot] 结尾"的 commit(dependabot 提交默认无 sign-off,须豁免)
+          gh api --paginate "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits"             --jq '.[] | select(((.commit.message | test("(?im)^Signed-off-by: .+ <.+@.+>$")) | not) and ((.author.login // "" | endswith("[bot]")) | not)) | .sha' > dco-bad.txt
           if [ -s dco-bad.txt ]; then
             while read -r sha; do
               echo "::error::commit $sha 缺少 Signed-off-by(提交时用 git commit -s;补救:git commit -s --amend 或 git rebase --signoff)"
@@ -91,12 +91,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           files=$(gh api --paginate "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
-          touched=$(printf '%s\n' "$files" | grep -E '^(src/constants\.ts|docs/reference\.md)' || true)
+          touched=$(printf '%s\n' "$files" | grep -E '^(src/constants\.ts|docs/reference\.md)$' || true)
           if [ -n "$touched" ]; then
             doc=$(printf '%s\n' "$files" | grep -E '^docs/contract-changes/[0-9]{8}-.+\.md$' || true)
             if [ -z "$doc" ]; then
               echo "::error::本 PR 触碰了冻结契约文件:"; printf '  %s\n' $touched
-              echo "::error::必须在同一个 PR 里新增 docs/contract-changes/<YYYYMMDD>-<slug>.md(模板见 docs/contract-changes/TEMPLATE.md),并挂 status/frozen-contract 标签由用户批准。"
+              echo "::error::必须在同一个 PR 里新增 docs/contract-changes/<YYYYMMDD>-<slug>.md(规范见 CLAUDE.md §5 冻结契约变更规范),并挂 status/frozen-contract 标签由用户批准。"
               exit 1
             fi
           fi
