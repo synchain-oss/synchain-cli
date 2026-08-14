@@ -115,7 +115,7 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
 
   const aiTag = (p: DiscussionPost) => (p.isAiGenerated ? " [AI]" : "");
   const lines: string[] = [];
-  // #186 消毒服务端字段：单行头用 sanitizeInline（防注入换行伪造连接线/缩进），正文用
+  // 消毒服务端字段：单行头用 sanitizeInline（防注入换行伪造连接线/缩进），正文用
   // sanitizeBlock（保留多行结构、去 ANSI/CR/控制字符）。aiTag/connector/indent 是 CLI 生成、安全。
   lines.push(
     `${sanitizeInline(root.title)}${aiTag(root)} — by ${sanitizeInline(root.authorName)} @ ${sanitizeInline(root.createdAt)}`
@@ -124,7 +124,7 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
   lines.push(sanitizeBlock(root.content));
   lines.push("-----");
 
-  // 任意深度嵌套（撤销 #185 两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
+  // 任意深度嵌套（撤销两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
   // 导致无限递归（Web 两处 buildReplyTree/fetchProjectDiscussion 已各有防环）。
   const visited = new Set<string>();
   function walk(parent: DiscussionPost, depth: number): void {
@@ -347,7 +347,7 @@ export async function runDiscussionReply(
       process.exit(1);
     }
 
-    // #200 item9: a full UUID posts directly — only an 8-char prefix needs the
+    // a full UUID posts directly — only an 8-char prefix needs the
     // full-thread fetch (discussion has no single-post GET to resolve against).
     // The server's zod schema rejects non-UUIDs and the POST validates that the
     // parent exists (its 404 is handled below), so no client-side pre-check is lost.

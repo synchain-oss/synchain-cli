@@ -5,7 +5,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /**
  * True when `input` is already a full canonical UUID (not just an 8-char prefix).
  * Lets a command skip the project-wide fetch that prefix resolution needs and hit
- * the single-resource endpoint directly (#200 item9).
+ * the single-resource endpoint directly.
  *
  * The explicit 36-char length guard is load-bearing: regex `$` (no `m` flag) also
  * matches just before a trailing "\n", so `UUID_RE.test("<uuid>\n")` alone returns

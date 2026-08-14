@@ -12,7 +12,7 @@ import {
   type ApiFetchOptions,
 } from "../api.js";
 
-// review-0707 #200 item10 / #223: api.ts had zero implementation-level coverage.
+// api.ts had zero implementation-level coverage.
 // These pin apiFetch's networked contract with a stubbed fetch — the Authorization
 // injection, joinUrl's absolute-URL branch (incl. its https guard), ApiError parsing,
 // and the 204 / non-JSON body paths — the CLI's most regression-prone surface.
