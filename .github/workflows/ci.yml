@@ -58,11 +58,12 @@ jobs:
           ! grep -q 'DLsnows' /tmp/h2.txt
 
   # no-stale-refs:09 §2.2 四条 grep,作为持续约束
-  # 三条例外:
+  # 四条例外:
   #   ① CHANGELOG.md 排除(其职责就是叙述历史,必然出现旧串)
   #   ② cd cli 用行首锚定 ^[[:space:]]*cd cli\b(只命中命令行,不误伤散文)
   #   ③ 排除 .github/workflows/**:本 job 的三个模式串字面量就写在这个文件里,
   #      若不排除,git grep 会命中 ci.yml 自身 → 永久红(检测器的自引用,不是陈旧引用)
+  #   ④ 排除 docs/contract-changes/**:冻结契约变更文档叙述历史(记录旧仓路径),与 CHANGELOG 同性质
   no-stale-refs:
     name: no-stale-refs
     runs-on: ubuntu-latest
@@ -71,17 +72,17 @@ jobs:
       - run: |
           bad=0
           for p in 'DLsnows/Synchain' 'UNLICENSED' 'docs/cli/'; do
-            if git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**' >/dev/null 2>&1; then
-              echo "::error::残留引用命中:$p"; git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**'; bad=1
+            if git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**' ':!docs/contract-changes/**' >/dev/null 2>&1; then
+              echo "::error::残留引用命中:$p"; git grep -nI -- "$p" -- ':!CHANGELOG.md' ':!.github/workflows/**' ':!docs/contract-changes/**'; bad=1
             fi
           done
           # `cd cli`:行首锚定 + 排除 CHANGELOG / 生成物目录
           if grep -rnE '^[[:space:]]*cd cli\b' . \
                --exclude=CHANGELOG.md --exclude-dir=.git \
-               --exclude-dir=node_modules --exclude-dir=dist >/dev/null 2>&1; then
+               --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=contract-changes >/dev/null 2>&1; then
             echo "::error::残留引用命中:cd cli(命令行形式)"
             grep -rnE '^[[:space:]]*cd cli\b' . --exclude=CHANGELOG.md --exclude-dir=.git \
-                 --exclude-dir=node_modules --exclude-dir=dist
+                 --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=contract-changes
             bad=1
           fi
           exit $bad
