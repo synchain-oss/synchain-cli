@@ -227,7 +227,8 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
     if (footer) console.log(pc.dim(footer));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -277,7 +278,8 @@ export async function runDiscussionRead(postId: string, flags: DiscussionFlags):
     console.log(renderThread(effectiveRoot, posts));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -307,14 +309,16 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
   try {
     if (!flags.title || !flags.title.trim()) {
       console.error(pc.red("--title is required and must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const category = validateCategory(flags.category);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
       console.error(pc.red("--content must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const created = await apiFetch<CreatedRow>(
@@ -330,7 +334,8 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -344,7 +349,8 @@ export async function runDiscussionReply(
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
       console.error(pc.red("--content must be non-empty."));
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // a full UUID posts directly — only an 8-char prefix needs the
@@ -369,16 +375,17 @@ export async function runDiscussionReply(
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       console.error(pc.red(`Parent post ${parentPostId} not found.`));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     if (err instanceof Error && /No post matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 

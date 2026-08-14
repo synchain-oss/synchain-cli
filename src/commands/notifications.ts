@@ -81,7 +81,8 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     console.log(pc.dim(`${res.unreadCount} unread`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 
@@ -116,7 +117,7 @@ export async function runNotificationsRead(
 
     if (!id) {
       console.error(pc.red("Provide a notification id, or use --all to mark everything read."));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
 
@@ -135,10 +136,11 @@ export async function runNotificationsRead(
   } catch (err) {
     if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {
       console.error(pc.red(err.message));
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
     console.error(pc.red(formatApiError(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
