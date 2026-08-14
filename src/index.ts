@@ -338,7 +338,7 @@ function buildProgram(): Command {
 export async function main(argv: string[] = process.argv): Promise<void> {
   // First-run welcome banner —— 仅在【交互式且非 --json】时打印，且只在真正打印后才落 sentinel。
   // banner 走 stderr（见 welcome.ts），据 stderr 是否为终端判定：--json/管道/重定向时完全不打印、
-  // 也不消费 first-run（让人类首次交互运行仍能看到 banner，同时绝不污染 stdout/--json）（#187）。
+  // 也不消费 first-run（让人类首次交互运行仍能看到 banner，同时绝不污染 stdout/--json）。
   const wantsJson = argv.includes("--json");
   if (isFirstRun() && process.stderr.isTTY === true && !wantsJson) {
     printWelcomeBanner();
