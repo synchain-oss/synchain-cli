@@ -73,7 +73,7 @@ CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTT
 | 运行时 | Node ≥ 20、npm |
 | 本地 gates | npm ci / typecheck / test --coverage / build / pack --dry-run / audit(§2) |
 | 合规扫描 | `gitleaks detect --no-git --redact --config .gitleaks.toml`(版本钉 .gitleaks-version)+ `pipx run reuse lint`(不进 npm run gates 字符串) |
-| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot);发布用 NPM_TOKEN |
+| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot);发布默认走 npm trusted publisher(OIDC,无长期 secret),NPM_TOKEN(Automation 类型)是旁路 —— 两者只被 `publish.yml` 消费,未配置时该 workflow 只能跑 `dry_run=true` |
 | 为什么强调本地 | 子 PR 不触发完整 CI;npm audit 与覆盖率阈值是 CI 硬门禁,本地先过 |
 
 ## 7. 安全铁律
