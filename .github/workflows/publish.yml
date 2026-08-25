@@ -48,6 +48,8 @@ jobs:
     timeout-minutes: 20
     outputs:
       version: ${{ steps.pkg.outputs.version }}
+      name: ${{ steps.pkg.outputs.name }}
+      real: ${{ steps.pkg.outputs.real }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
@@ -78,20 +80,33 @@ jobs:
       - name: Gates
         run: npm run gates
 
-      - name: Read package metadata
+      - name: Read package metadata / resolve run mode
         id: pkg
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           v=$(node -p "require('./package.json').version")
           n=$(node -p "require('./package.json').name")
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "name=$n"    >> "$GITHUB_OUTPUT"
-          echo "package: $n@$v"
+
+          # dry_run 归一化。UI 勾选时 inputs.dry_run 是真布尔,但用 REST API /
+          # `gh workflow run -f dry_run=false` 触发时它是**字符串** "false" ——
+          # GH 表达式里非空字符串恒 truthy,若直接写 `if: ${{ !inputs.dry_run }}`,
+          # 那种触发方式会把 publish job 静默跳过(操作者以为发了,其实没发)。
+          # 在 shell 里归一化一次:只有显式的 "false" 才算真实发布,其余(含缺省)一律 dry-run。
+          if [ "$DRY_RUN" = "false" ]; then real=true; else real=false; fi
+
+          {
+            echo "version=$v"
+            echo "name=$n"
+            echo "real=$real"
+          } >> "$GITHUB_OUTPUT"
+          echo "package: $n@$v / real publish: $real"
 
       # 发布前置断言。除 ① 外,dry_run 时只告警(便于随时体检),真实发布时一律硬失败。
       # 断言自身的取值都做了兜底,避免默认 `bash -e` 下一次网络抖动就把体检打成红。
       - name: Preflight assertions
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
+          REAL: ${{ steps.pkg.outputs.real }}
           AUTH_MODE: ${{ inputs.auth_mode }}
           PKG_NAME: ${{ steps.pkg.outputs.name }}
           VERSION: ${{ steps.pkg.outputs.version }}
@@ -100,10 +115,10 @@ jobs:
         run: |
           bad=0
           note() {
-            if [ "$DRY_RUN" = "true" ]; then
-              echo "::warning::$1(dry_run 下仅告警)"
-            else
+            if [ "$REAL" = "true" ]; then
               echo "::error::$1"; bad=1
+            else
+              echo "::warning::$1(dry_run 下仅告警)"
             fi
           }
 
@@ -170,7 +185,7 @@ jobs:
       # 环境前置条件失败,而那些条件已在上一步逐条断言过了)。
       # 放在 preflight 里 = 不过人工闸、不碰 OIDC token。
       - name: npm publish --dry-run
-        if: ${{ inputs.dry_run }}
+        if: ${{ steps.pkg.outputs.real != 'true' }}
         env:
           NPM_CONFIG_PROVENANCE: 'false'
         run: npm publish --dry-run --access public
@@ -178,7 +193,8 @@ jobs:
   publish:
     name: publish
     needs: preflight
-    if: ${{ !inputs.dry_run }}
+    # 判据取 preflight 归一化后的 real,不直接用 inputs.dry_run(见上面的归一化注释)
+    if: ${{ needs.preflight.outputs.real == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 人工闸:给该 environment 配 required reviewer,真实发布必须有人点批准。
@@ -203,7 +219,7 @@ jobs:
           need=11.5.1
           have=$(npm --version)
           if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -n1)" != "$need" ]; then
-            npm install -g "npm@$need"
+            npm install -g --ignore-scripts "npm@$need"   # 与下面的 npm ci 同口径
           fi
           npm --version
 
@@ -217,6 +233,8 @@ jobs:
       # 走 OIDC 交换。npm 文档称此路径会自动生成 provenance、无需 --provenance,
       # 但社区多次报告需显式加该标志才成功;显式给出是 fail-closed 的:
       # 万一 provenance 生不成,宁可发布失败,也不要发出一个没有 attestation 的包。
+      # 注意:trusted publisher 的四元组(owner/repo/workflow/environment)配得对不对,
+      # 只有真实发布那一次才知道 —— 首次打通链路请先发一个预发布版本(如 0.6.1-rc.0)。
       - name: npm publish (trusted publisher / OIDC)
         if: ${{ inputs.auth_mode == 'oidc' }}
         run: npm publish --access public --provenance
@@ -228,14 +246,33 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
 
+      # 事后断言:确认包**真的**上了 npm。没有这一步的话,publish step 因某种
+      # 条件求值意外被跳过时,job 依然是绿的,操作者会以为发布成功了。
+      - name: Verify published
+        env:
+          PKG_NAME: ${{ needs.preflight.outputs.name }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          # registry/CDN 有传播延迟。发布不可撤销,这一步误红会造成「到底发没发」的恐慌,
+          # 所以给足重试,失败才是真失败。
+          for i in 1 2 3 4 5 6; do
+            if npm view "${PKG_NAME}@${VERSION}" version; then
+              echo "published: ${PKG_NAME}@${VERSION}"; exit 0
+            fi
+            echo "尚未可见,10s 后重试($i/6)"; sleep 10
+          done
+          echo "::error::发布后 60s 内仍查不到 ${PKG_NAME}@${VERSION},请手工到 npmjs.com 确认"
+          exit 1
+
       - name: Summary
         if: always()
         env:
+          PKG_NAME: ${{ needs.preflight.outputs.name }}
           VERSION: ${{ needs.preflight.outputs.version }}
           AUTH_MODE: ${{ inputs.auth_mode }}
         run: |
           {
-            echo "### @synchain/cli publish"
+            echo "### $PKG_NAME publish"
             echo ""
             echo "- version: \`$VERSION\`"
             echo "- ref: \`${GITHUB_REF}\`"

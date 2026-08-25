@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Manual `workflow_dispatch` only (no tag-triggered publishing), defaults to
   `dry_run`, runs the full gates plus release preflight assertions, and puts the
   real publish behind the `npm-publish` environment. Publishing uses npm trusted
-  publishing (OIDC), which generates provenance attestations automatically; an
-  `NPM_TOKEN` path stays available as a fallback.
+  publishing (OIDC) with `--provenance`, so every release carries a provenance
+  attestation; an `NPM_TOKEN` path stays available as a fallback.
 
 ## [0.6.0] - 2026-08-14
 
