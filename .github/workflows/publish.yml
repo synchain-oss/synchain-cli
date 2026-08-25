@@ -12,8 +12,10 @@ name: Publish to npm
 # 发布流程:
 #   1. 在 dev 上落定版本(package.json + CHANGELOG)并打 tag vX.Y.Z;
 #   2. Actions → Publish to npm → Run workflow,ref 选那个 tag;
-#   3. 先跑 dry_run=true(默认)确认 preflight 全绿、包内容正确;
-#   4. 再跑一次 dry_run=false —— 该次会停在 npm-publish environment 的人工闸上。
+#   3. 先跑 dry_run=true(默认):只跑 preflight job —— 该 job **不挂 environment**,
+#      不需要人工审批,随时可做体检;
+#   4. 再跑一次 dry_run=false:preflight 全绿后才进 publish job,
+#      那一步停在 npm-publish environment 的人工闸上等批准。
 
 on:
   workflow_dispatch:
@@ -31,14 +33,15 @@ on:
 permissions:
   contents: read
 
-# 发布不允许并发,也绝不 cancel-in-progress(半路取消一次真实 publish 后果不可预期)
+# 发布不允许并发,也绝不 cancel-in-progress(半路取消一次真实 publish 后果不可预期)。
+# group 带上 dry_run:体检不会去排真实发布的队。
 concurrency:
-  group: publish-${{ github.repository }}
+  group: publish-${{ github.repository }}-${{ inputs.dry_run }}
   cancel-in-progress: false
 
 jobs:
-  # preflight 故意不挂 environment:构建/测试/断言先跑,失败在这里就暴露,
-  # 不必先消耗一次 environment 的人工审批。触碰 npm registry 的动作全在 publish job。
+  # preflight 故意**不挂 environment**:构建、断言、以及 dry-run 体检都在这里,
+  # 全程不需要人工审批也拿不到 OIDC token。触碰 npm registry 写入面的只有 publish job。
   preflight:
     name: preflight
     runs-on: ubuntu-latest
@@ -48,7 +51,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          fetch-depth: 0          # 版本/tag 一致性断言需要完整 tag 列表
+          fetch-depth: 0              # 版本/tag 一致性断言需要完整 tag 列表
+          persist-credentials: false  # 后续步骤跑第三方依赖代码,不给它们留 git 凭据
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
         with:
@@ -74,18 +78,22 @@ jobs:
       - name: Gates
         run: npm run gates
 
-      - name: Read package version
+      - name: Read package metadata
         id: pkg
         run: |
           v=$(node -p "require('./package.json').version")
+          n=$(node -p "require('./package.json').name")
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "package version: $v"
+          echo "name=$n"    >> "$GITHUB_OUTPUT"
+          echo "package: $n@$v"
 
-      # 发布前置断言。dry_run 时只告警(便于随时体检),真实发布时一律硬失败。
+      # 发布前置断言。除 ① 外,dry_run 时只告警(便于随时体检),真实发布时一律硬失败。
+      # 断言自身的取值都做了兜底,避免默认 `bash -e` 下一次网络抖动就把体检打成红。
       - name: Preflight assertions
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           AUTH_MODE: ${{ inputs.auth_mode }}
+          PKG_NAME: ${{ steps.pkg.outputs.name }}
           VERSION: ${{ steps.pkg.outputs.version }}
           NPM_TOKEN_PRESENT: ${{ secrets.NPM_TOKEN != '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,19 +109,24 @@ jobs:
 
           # ① provenance 前置条件 4 / 07 C09 验收:repository.url 必须与运行仓库一致,
           #    否则 npm 生成 provenance 时直接报错。
-          repo_url=$(node -p "require('./package.json').repository.url")
+          #    **这条是恒硬失败的例外**:它是 C-FIX-07 的机器判据,dry_run 下同样红。
+          repo_url=$(node -p "(require('./package.json').repository||{}).url || ''")
           expect="git+https://github.com/${GITHUB_REPOSITORY}.git"
           if [ "$repo_url" != "$expect" ]; then
-            echo "::error::package.json repository.url = $repo_url,期望 $expect(provenance 前置条件)"
-            bad=1        # 这条无论 dry_run 与否都硬失败:它是 C-FIX-07 的机器判据
+            echo "::error::package.json repository.url = '${repo_url}',期望 '${expect}'(provenance 前置条件)"
+            bad=1
           else
             echo "repository.url ok: $repo_url"
           fi
 
           # ② provenance 前置条件 1:仓库必须是 public(转 public 是独立合规闸,归 O07)
-          vis=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)
+          vis=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility 2>/dev/null || echo "unknown")
           echo "repository visibility: $vis"
-          [ "$vis" = "public" ] || note "仓库当前为 $vis,provenance 要求 public(转 public 见 O07)"
+          case "$vis" in
+            public)  ;;
+            unknown) note "读取仓库 visibility 失败(gh api 限流/网络/权限?),无法核对 provenance 的 public 前置条件" ;;
+            *)       note "仓库当前为 $vis,provenance 要求 public(转 public 见 O07)" ;;
+          esac
 
           # ③ provenance 前置条件 3:npm ≥ 9.5(OIDC 另需 ≥ 11.5.1,已在上一步保证)
           npm --version
@@ -126,11 +139,17 @@ jobs:
             *) note "当前 commit 上没有 tag v$VERSION(请先在发版 commit 上打 tag 再从该 tag 触发本 workflow)" ;;
           esac
 
-          # ⑤ 版本未被占用:npm 发布不可撤销,重复版本必须在动手前拦下
-          if npm view "@synchain/cli@$VERSION" version >/dev/null 2>&1; then
-            note "@synchain/cli@$VERSION 已存在于 npm,版本号不可复用(请先提升版本)"
-          else
+          # ⑤ 版本未被占用:npm 发布不可撤销,重复版本必须在动手前拦下。
+          #    必须区分「registry 说没有」(E404)与「问不到 registry」(限流/5xx/超时)——
+          #    后者当作未占用会让这条检查被网络抖动静默绕过。
+          out=$(npm view "${PKG_NAME}@${VERSION}" version 2>&1) && rc=0 || rc=$?
+          if [ "$rc" = "0" ]; then
+            note "${PKG_NAME}@${VERSION} 已存在于 npm,版本号不可复用(请先提升版本)"
+          elif printf '%s' "$out" | grep -q 'E404'; then
             echo "version $VERSION 尚未发布,ok"
+          else
+            note "查询 npm 上的 ${PKG_NAME}@${VERSION} 失败(非 E404),无法确认版本是否已被占用"
+            printf '%s\n' "$out"
           fi
 
           # ⑥ 凭据模式自洽性(只判断 secret 是否为空,绝不回显其内容)。
@@ -141,15 +160,25 @@ jobs:
             echo "::warning::auth_mode=token,但 preflight 看不到 repository 级 secret NPM_TOKEN;若它配在 npm-publish environment 上,这条可忽略"
           fi
           if [ "$AUTH_MODE" = "oidc" ]; then
-            echo "auth_mode=oidc:需要 npmjs.com 上为 @synchain/cli 配好 trusted publisher"
+            echo "auth_mode=oidc:需要 npmjs.com 上为 ${PKG_NAME} 配好 trusted publisher"
             echo "  (owner=synchain-oss / repo=synchain-cli / workflow=publish.yml / environment=npm-publish)"
           fi
 
           exit $bad
 
+      # dry run:纯打包体检,不带凭据、不生成 provenance(否则会因 attestation 的
+      # 环境前置条件失败,而那些条件已在上一步逐条断言过了)。
+      # 放在 preflight 里 = 不过人工闸、不碰 OIDC token。
+      - name: npm publish --dry-run
+        if: ${{ inputs.dry_run }}
+        env:
+          NPM_CONFIG_PROVENANCE: 'false'
+        run: npm publish --dry-run --access public
+
   publish:
     name: publish
     needs: preflight
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 人工闸:给该 environment 配 required reviewer,真实发布必须有人点批准。
@@ -160,6 +189,8 @@ jobs:
       id-token: write           # provenance / trusted publishing 的 Sigstore OIDC 必需
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
         with:
@@ -176,26 +207,23 @@ jobs:
           fi
           npm --version
 
-      - run: npm ci
+      # --ignore-scripts:本 job 持有 id-token: write,一个被投毒的传递依赖若能在
+      # postinstall 里跑代码,就能换取 OIDC token 并以 trusted publisher 身份发包。
+      # 本仓的构建只用 tsc,不依赖任何 install 脚本(已本地验证)。
+      - run: npm ci --ignore-scripts
       - run: npm run build        # package.json 的 files 只含 dist/,必须现构建
 
-      # dry run:纯打包体检,不带凭据、不生成 provenance(否则会因 attestation 的
-      # 环境前置条件失败,而那些条件已在 preflight 里逐条断言过了)。
-      - name: npm publish --dry-run
-        if: ${{ inputs.dry_run }}
-        env:
-          NPM_CONFIG_PROVENANCE: 'false'
-        run: npm publish --dry-run --access public
-
-      # 真实发布 · OIDC(trusted publisher):不设 NODE_AUTH_TOKEN,
-      # npm ≥ 11.5.1 走 OIDC 交换并**自动**生成 provenance,无需 --provenance。
+      # 真实发布 · OIDC(trusted publisher):不设 NODE_AUTH_TOKEN,npm ≥ 11.5.1
+      # 走 OIDC 交换。npm 文档称此路径会自动生成 provenance、无需 --provenance,
+      # 但社区多次报告需显式加该标志才成功;显式给出是 fail-closed 的:
+      # 万一 provenance 生不成,宁可发布失败,也不要发出一个没有 attestation 的包。
       - name: npm publish (trusted publisher / OIDC)
-        if: ${{ !inputs.dry_run && inputs.auth_mode == 'oidc' }}
-        run: npm publish --access public
+        if: ${{ inputs.auth_mode == 'oidc' }}
+        run: npm publish --access public --provenance
 
       # 真实发布 · Automation token 旁路(trusted publisher 未配好时的过渡路径)
       - name: npm publish (NPM_TOKEN)
-        if: ${{ !inputs.dry_run && inputs.auth_mode == 'token' }}
+        if: ${{ inputs.auth_mode == 'token' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
@@ -204,12 +232,12 @@ jobs:
         if: always()
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
+          AUTH_MODE: ${{ inputs.auth_mode }}
         run: |
           {
             echo "### @synchain/cli publish"
             echo ""
             echo "- version: \`$VERSION\`"
             echo "- ref: \`${GITHUB_REF}\`"
-            echo "- dry_run: \`${{ inputs.dry_run }}\`"
-            echo "- auth_mode: \`${{ inputs.auth_mode }}\`"
+            echo "- auth_mode: \`$AUTH_MODE\`"
           } >> "$GITHUB_STEP_SUMMARY"
