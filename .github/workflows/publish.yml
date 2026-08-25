@@ -1,0 +1,280 @@
+name: Publish to npm
+
+# 唯一的 npm 发布入口(09 §4.4 / 07 C09)。
+#
+# 【为什么没有 tag 触发】CLI 仓**不设** tag 触发的自动发布:
+#   ① npm 发布不可撤销(unpublish 只有 72 小时窗口,且版本号被永久占用);
+#   ② 09 §4.3 规定 CLI 的 tag 就是 vX.Y.Z —— 若监听 push: tags: ['v*'],
+#      版本落定后随手打个 tag 就会把包推上 npm;
+#   ③ tag 触发绕过 D2「关键动作等用户批准」。
+# 若日后在本仓看到 tag 触发的 publish/release workflow,那是过时口径,删掉。
+#
+# 发布流程:
+#   1. 在 dev 上落定版本(package.json + CHANGELOG)并打 tag vX.Y.Z;
+#   2. Actions → Publish to npm → Run workflow,ref 选那个 tag;
+#   3. 先跑 dry_run=true(默认):只跑 preflight job —— 该 job **不挂 environment**,
+#      不需要人工审批,随时可做体检;
+#   4. 再跑一次 dry_run=false:preflight 全绿后才进 publish job,
+#      那一步停在 npm-publish environment 的人工闸上等批准。
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只做 npm publish --dry-run(默认勾选;取消勾选才会真正发布到 npm,不可撤销)'
+        type: boolean
+        default: true
+      auth_mode:
+        description: '发布凭据:oidc = npm trusted publisher(无长期 secret,推荐)/ token = 仓库 secret NPM_TOKEN(Automation 类型)'
+        type: choice
+        options: [oidc, token]
+        default: oidc
+
+permissions:
+  contents: read
+
+# 发布不允许并发,也绝不 cancel-in-progress(半路取消一次真实 publish 后果不可预期)。
+# group 带上 dry_run:体检不会去排真实发布的队。
+concurrency:
+  group: publish-${{ github.repository }}-${{ inputs.dry_run }}
+  cancel-in-progress: false
+
+jobs:
+  # preflight 故意**不挂 environment**:构建、断言、以及 dry-run 体检都在这里,
+  # 全程不需要人工审批也拿不到 OIDC token。触碰 npm registry 写入面的只有 publish job。
+  preflight:
+    name: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+      name: ${{ steps.pkg.outputs.name }}
+      real: ${{ steps.pkg.outputs.real }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0              # 版本/tag 一致性断言需要完整 tag 列表
+          persist-credentials: false  # 后续步骤跑第三方依赖代码,不给它们留 git 凭据
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
+        with:
+          node-version: '24'      # trusted publishing 要求 node ≥ 22.14 + npm ≥ 11.5.1
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      # npm ≥ 11.5.1 是 trusted publishing(OIDC)的硬要求;node 24 自带的 npm 通常已满足,
+      # 低于阈值时装一个**精确钉住**的版本,不用 npm@latest(供应链纪律)。
+      - name: Ensure npm >= 11.5.1
+        run: |
+          need=11.5.1
+          have=$(npm --version)
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -n1)" != "$need" ]; then
+            echo "npm $have < $need,安装 npm@$need"
+            npm install -g "npm@$need"
+          fi
+          npm --version
+
+      - run: npm ci
+
+      # 本仓一键门禁:typecheck + test --coverage + build + pack --dry-run + audit(CLAUDE.md §2)
+      - name: Gates
+        run: npm run gates
+
+      - name: Read package metadata / resolve run mode
+        id: pkg
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          v=$(node -p "require('./package.json').version")
+          n=$(node -p "require('./package.json').name")
+
+          # dry_run 归一化。UI 勾选时 inputs.dry_run 是真布尔,但用 REST API /
+          # `gh workflow run -f dry_run=false` 触发时它是**字符串** "false" ——
+          # GH 表达式里非空字符串恒 truthy,若直接写 `if: ${{ !inputs.dry_run }}`,
+          # 那种触发方式会把 publish job 静默跳过(操作者以为发了,其实没发)。
+          # 在 shell 里归一化一次:只有显式的 "false" 才算真实发布,其余(含缺省)一律 dry-run。
+          if [ "$DRY_RUN" = "false" ]; then real=true; else real=false; fi
+
+          {
+            echo "version=$v"
+            echo "name=$n"
+            echo "real=$real"
+          } >> "$GITHUB_OUTPUT"
+          echo "package: $n@$v / real publish: $real"
+
+      # 发布前置断言。除 ① 外,dry_run 时只告警(便于随时体检),真实发布时一律硬失败。
+      # 断言自身的取值都做了兜底,避免默认 `bash -e` 下一次网络抖动就把体检打成红。
+      - name: Preflight assertions
+        env:
+          REAL: ${{ steps.pkg.outputs.real }}
+          AUTH_MODE: ${{ inputs.auth_mode }}
+          PKG_NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          NPM_TOKEN_PRESENT: ${{ secrets.NPM_TOKEN != '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bad=0
+          note() {
+            if [ "$REAL" = "true" ]; then
+              echo "::error::$1"; bad=1
+            else
+              echo "::warning::$1(dry_run 下仅告警)"
+            fi
+          }
+
+          # ① provenance 前置条件 4 / 07 C09 验收:repository.url 必须与运行仓库一致,
+          #    否则 npm 生成 provenance 时直接报错。
+          #    **这条是恒硬失败的例外**:它是 C-FIX-07 的机器判据,dry_run 下同样红。
+          repo_url=$(node -p "(require('./package.json').repository||{}).url || ''")
+          expect="git+https://github.com/${GITHUB_REPOSITORY}.git"
+          if [ "$repo_url" != "$expect" ]; then
+            echo "::error::package.json repository.url = '${repo_url}',期望 '${expect}'(provenance 前置条件)"
+            bad=1
+          else
+            echo "repository.url ok: $repo_url"
+          fi
+
+          # ② provenance 前置条件 1:仓库必须是 public(转 public 是独立合规闸,归 O07)
+          vis=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility 2>/dev/null || echo "unknown")
+          echo "repository visibility: $vis"
+          case "$vis" in
+            public)  ;;
+            unknown) note "读取仓库 visibility 失败(gh api 限流/网络/权限?),无法核对 provenance 的 public 前置条件" ;;
+            *)       note "仓库当前为 $vis,provenance 要求 public(转 public 见 O07)" ;;
+          esac
+
+          # ③ provenance 前置条件 3:npm ≥ 9.5(OIDC 另需 ≥ 11.5.1,已在上一步保证)
+          npm --version
+
+          # ④ 版本与 tag 一致性:当前 commit 上必须有 v$VERSION tag,防止误发未打 tag 的版本
+          tags=$(git tag --points-at HEAD | tr '\n' ' ')
+          echo "tags on HEAD: ${tags:-<none>}"
+          case " $tags " in
+            *" v$VERSION "*) echo "tag v$VERSION ok" ;;
+            *) note "当前 commit 上没有 tag v$VERSION(请先在发版 commit 上打 tag 再从该 tag 触发本 workflow)" ;;
+          esac
+
+          # ⑤ 版本未被占用:npm 发布不可撤销,重复版本必须在动手前拦下。
+          #    必须区分「registry 说没有」(E404)与「问不到 registry」(限流/5xx/超时)——
+          #    后者当作未占用会让这条检查被网络抖动静默绕过。
+          out=$(npm view "${PKG_NAME}@${VERSION}" version 2>&1) && rc=0 || rc=$?
+          if [ "$rc" = "0" ]; then
+            note "${PKG_NAME}@${VERSION} 已存在于 npm,版本号不可复用(请先提升版本)"
+          elif printf '%s' "$out" | grep -q 'E404'; then
+            echo "version $VERSION 尚未发布,ok"
+          else
+            note "查询 npm 上的 ${PKG_NAME}@${VERSION} 失败(非 E404),无法确认版本是否已被占用"
+            printf '%s\n' "$out"
+          fi
+
+          # ⑥ 凭据模式自洽性(只判断 secret 是否为空,绝不回显其内容)。
+          #    这条**永远只告警**:NPM_TOKEN 若配成 npm-publish 的 environment secret,
+          #    本 job(不挂 environment)本来就看不见它,硬失败会拦住合法发布。
+          #    真正的判据是 publish job 里 npm 自己的鉴权结果。
+          if [ "$AUTH_MODE" = "token" ] && [ "$NPM_TOKEN_PRESENT" != "true" ]; then
+            echo "::warning::auth_mode=token,但 preflight 看不到 repository 级 secret NPM_TOKEN;若它配在 npm-publish environment 上,这条可忽略"
+          fi
+          if [ "$AUTH_MODE" = "oidc" ]; then
+            echo "auth_mode=oidc:需要 npmjs.com 上为 ${PKG_NAME} 配好 trusted publisher"
+            echo "  (owner=synchain-oss / repo=synchain-cli / workflow=publish.yml / environment=npm-publish)"
+          fi
+
+          exit $bad
+
+      # dry run:纯打包体检,不带凭据、不生成 provenance(否则会因 attestation 的
+      # 环境前置条件失败,而那些条件已在上一步逐条断言过了)。
+      # 放在 preflight 里 = 不过人工闸、不碰 OIDC token。
+      - name: npm publish --dry-run
+        if: ${{ steps.pkg.outputs.real != 'true' }}
+        env:
+          NPM_CONFIG_PROVENANCE: 'false'
+        run: npm publish --dry-run --access public
+
+  publish:
+    name: publish
+    needs: preflight
+    # 判据取 preflight 归一化后的 real,不直接用 inputs.dry_run(见上面的归一化注释)
+    if: ${{ needs.preflight.outputs.real == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 人工闸:给该 environment 配 required reviewer,真实发布必须有人点批准。
+    # environment 的创建与审批人配置属用户动手项(P 系列),workflow 侧只负责引用。
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write           # provenance / trusted publishing 的 Sigstore OIDC 必需
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Ensure npm >= 11.5.1
+        run: |
+          need=11.5.1
+          have=$(npm --version)
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -n1)" != "$need" ]; then
+            npm install -g --ignore-scripts "npm@$need"   # 与下面的 npm ci 同口径
+          fi
+          npm --version
+
+      # --ignore-scripts:本 job 持有 id-token: write,一个被投毒的传递依赖若能在
+      # postinstall 里跑代码,就能换取 OIDC token 并以 trusted publisher 身份发包。
+      # 本仓的构建只用 tsc,不依赖任何 install 脚本(已本地验证)。
+      - run: npm ci --ignore-scripts
+      - run: npm run build        # package.json 的 files 只含 dist/,必须现构建
+
+      # 真实发布 · OIDC(trusted publisher):不设 NODE_AUTH_TOKEN,npm ≥ 11.5.1
+      # 走 OIDC 交换。npm 文档称此路径会自动生成 provenance、无需 --provenance,
+      # 但社区多次报告需显式加该标志才成功;显式给出是 fail-closed 的:
+      # 万一 provenance 生不成,宁可发布失败,也不要发出一个没有 attestation 的包。
+      # 注意:trusted publisher 的四元组(owner/repo/workflow/environment)配得对不对,
+      # 只有真实发布那一次才知道 —— 首次打通链路请先发一个预发布版本(如 0.6.1-rc.0)。
+      - name: npm publish (trusted publisher / OIDC)
+        if: ${{ inputs.auth_mode == 'oidc' }}
+        run: npm publish --access public --provenance
+
+      # 真实发布 · Automation token 旁路(trusted publisher 未配好时的过渡路径)
+      - name: npm publish (NPM_TOKEN)
+        if: ${{ inputs.auth_mode == 'token' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+
+      # 事后断言:确认包**真的**上了 npm。没有这一步的话,publish step 因某种
+      # 条件求值意外被跳过时,job 依然是绿的,操作者会以为发布成功了。
+      - name: Verify published
+        env:
+          PKG_NAME: ${{ needs.preflight.outputs.name }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          # registry/CDN 有传播延迟。发布不可撤销,这一步误红会造成「到底发没发」的恐慌,
+          # 所以给足重试,失败才是真失败。
+          for i in 1 2 3 4 5 6; do
+            if npm view "${PKG_NAME}@${VERSION}" version; then
+              echo "published: ${PKG_NAME}@${VERSION}"; exit 0
+            fi
+            echo "尚未可见,10s 后重试($i/6)"; sleep 10
+          done
+          echo "::error::发布后 60s 内仍查不到 ${PKG_NAME}@${VERSION},请手工到 npmjs.com 确认"
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          PKG_NAME: ${{ needs.preflight.outputs.name }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          AUTH_MODE: ${{ inputs.auth_mode }}
+        run: |
+          {
+            echo "### $PKG_NAME publish"
+            echo ""
+            echo "- version: \`$VERSION\`"
+            echo "- ref: \`${GITHUB_REF}\`"
+            echo "- auth_mode: \`$AUTH_MODE\`"
+          } >> "$GITHUB_STEP_SUMMARY"

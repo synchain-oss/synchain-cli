@@ -4,6 +4,16 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `publish.yml` workflow: the single, auditable entry point for releasing to npm.
+  Manual `workflow_dispatch` only (no tag-triggered publishing), defaults to
+  `dry_run`, runs the full gates plus release preflight assertions, and puts the
+  real publish behind the `npm-publish` environment. Publishing uses npm trusted
+  publishing (OIDC) with `--provenance`, so every release carries a provenance
+  attestation; an `NPM_TOKEN` path stays available as a fallback.
+
 ## [0.6.0] - 2026-08-14
 
 Second public release. Skips 0.5.x (those versions belong to the old monorepo
