@@ -21,7 +21,14 @@
  * relax later, and rows written before a tightening are never re-validated. Keeping the
  * test local, with each lane on its own path, is the only form that does not depend on
  * two release cadences staying in step.
+ *
+ * ℹ️ Every server-derived string interpolated into an error below goes through
+ * `sanitizeInline` first. These messages are printed straight to stderr by `formatApiError`,
+ * which does no sanitizing of its own, and a project id or custom ID is content any admin of
+ * that project controls — an unsanitized one is a terminal-escape injection vector.
  */
+
+import { sanitizeInline } from "./sanitize.js";
 
 /** Canonical 36-char UUID (the id shape Synchain stores for every record). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -198,12 +205,32 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
 ): Promise<T> {
   const all = await fetchAll();
 
+  // Trim **once**, up front, so both lanes are equally forgiving of paste artifacts. Before
+  // this, `" my-band "` resolved (refKey trims as part of building its comparison key) while
+  // `" <uuid> "` did not (the UUID lane compares raw bytes) — an asymmetry with no
+  // justification, since "paste it anywhere" is the whole point of the feature and a UUID
+  // copied out of a JSON blob routinely carries a trailing newline.
+  //
+  // This does not weaken `isUuid`'s length guard: that guard exists so a *padded* string is
+  // never short-circuited into a single-resource URL, and trimming here means it is simply
+  // never handed one.
+  const raw = input.trim();
+  if (!raw) {
+    // Guarded explicitly rather than left to fall through: an empty string is a prefix of
+    // every id, so the UUID lane would answer `prefix "" is ambiguous (matches N)`, which
+    // tells the user nothing about what they actually did wrong.
+    throw new Error(`No project matches "${sanitizeInline(input)}".`);
+  }
+
   // (1) Custom-ID match — its own candidate pool, with no UUID mixed in. Compared on the
   // **spoken form** (hyphens stripped, the same key the server uses), not byte-for-byte:
   // `neontide` must hit `neon-tide`, or the CLI and the browser answer one string
   // differently.
-  const wanted = refKey(input); // UUID-lane key: hyphens kept
-  const wantedSlug = slugKeyOf(input); // custom-ID-lane key: hyphens stripped
+  const wanted = refKey(raw); // UUID-lane key: hyphens kept
+  // Still guarded: a non-empty input can fold to an empty slug key when it is all hyphens
+  // (`---`). Without the guard such an input would "exactly match" every project that has
+  // no custom ID at all.
+  const wantedSlug = slugKeyOf(raw); // custom-ID-lane key: hyphens stripped
   if (wantedSlug) {
     const hits = all.filter((p) => slugKeyOf(p.customId) === wantedSlug);
     if (hits.length > 1) {
@@ -213,7 +240,7 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       // deliberately differs from the UUID one — the next action differs too, since there
       // are no "more characters" to add here.
       throw new Error(
-        `Custom ID "${input}" is ambiguous (matches ${hits.length} projects). Use the full UUID instead.`
+        `Custom ID "${sanitizeInline(raw)}" is ambiguous (matches ${hits.length} projects). Use the full UUID instead.`
       );
     }
     if (hits.length === 1) {
@@ -229,8 +256,10 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       const shadowed = wanted ? all.filter((p) => p !== hit && p.id.startsWith(wanted)) : [];
       if (shadowed.length > 0) {
         throw new Error(
-          `"${input}" is ambiguous: it is the custom ID of project ${hit.id} and also a UUID prefix of ${shadowed
-            .map((p) => p.id)
+          `"${sanitizeInline(raw)}" is ambiguous: it is the custom ID of project ${sanitizeInline(
+            hit.id
+          )} and also a UUID prefix of ${shadowed
+            .map((p) => sanitizeInline(p.id))
             .join(", ")}. Use the full UUID instead.`
         );
       }
@@ -240,8 +269,8 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
 
   // (2) `synchain-<uuid>`: what the web "Copy ID" button yields for a project that has no
   // custom ID.
-  const stripped = input.replace(SYNCHAIN_PREFIX_RE, "");
-  const bare = stripped !== input && isUuid(stripped) ? stripped : input;
+  const stripped = raw.replace(SYNCHAIN_PREFIX_RE, "");
+  const bare = stripped !== raw && isUuid(stripped) ? stripped : raw;
 
   // (3)(4) Hand back to the UUID lane. **Only a string already proven to be a full UUID is
   // case-folded**: UUIDs are case-insensitive, but the comparisons below are byte-wise

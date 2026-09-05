@@ -40,6 +40,14 @@ describe("sanitizeInline", () => {
     expect(sanitizeInline(undefined)).toBe("");
     expect(sanitizeInline(42)).toBe("42");
   });
+
+  it("neutralises a custom project ID carrying escapes (project use prints one)", () => {
+    // `customId` is chosen by an admin of the project and is printed by `project use` and
+    // by the `ref` column of `project ls`. A CR here would let one project's row overwrite
+    // the line above it in the caller's terminal.
+    expect(sanitizeInline("my-band\u001b[2K\rowned")).toBe("my-band owned");
+    expect(sanitizeInline("\u001b]0;pwned\u0007neon-tide")).toBe("neon-tide");
+  });
 });
 
 describe("sanitizeBlock", () => {

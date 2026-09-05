@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig, saveConfig } from "../config.js";
 import { isUuid, projectRefLabel, resolveProjectRef } from "../util/resolve-id.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
 import type { MeResponse } from "./login.js";
 
@@ -72,13 +73,28 @@ export async function runProjectUse(input: string): Promise<void> {
     // invariant's last gate on the CLI side -- if anyone ever writes `input` here it fails
     // on the spot, instead of leaving every later command to hit one of those two outcomes.
     if (!isUuid(resolved.id)) {
-      throw new Error(`Resolved project id is not a canonical UUID: ${resolved.id}`);
+      // Sanitized even though it is "just an id": this branch fires precisely when the
+      // string is **not** a UUID, i.e. at the one moment we have the least reason to assume
+      // it is clean.
+      throw new Error(
+        `Resolved project id is not a canonical UUID: ${sanitizeInline(resolved.id)}`
+      );
     }
     await saveConfig({
       ...cfg,
       activeProject: { id: resolved.id, name: resolved.name },
     });
-    console.log(pc.green(`Active project set to ${resolved.name} (${projectRefLabel(resolved)}).`));
+    // Both interpolated values are server strings that any admin of the project controls, so
+    // they must be ANSI-sanitized before reaching a terminal (CLAUDE.md 7.4). `project ls`
+    // gets this for free through renderTable -> toCell -> sanitizeInline; this line has no
+    // such funnel of its own and has to do it explicitly.
+    console.log(
+      pc.green(
+        `Active project set to ${sanitizeInline(resolved.name)} (${sanitizeInline(
+          projectRefLabel(resolved)
+        )}).`
+      )
+    );
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
     process.exitCode = 1;
