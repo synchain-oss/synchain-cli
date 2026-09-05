@@ -213,11 +213,45 @@ describe("resolveProjectRef", () => {
     );
   });
 
-  it("does not let empty / whitespace input collide with projects that have no custom ID", async () => {
-    // A null / undefined customId folds to an empty key too — unguarded, an empty input
-    // would "match exactly" every project that never set a custom ID.
-    await expect(resolveProjectRef("", allProjects)).rejects.toThrow(/ambiguous|No project/);
+  it("rejects empty / whitespace-only input with a message about the input, not a bogus prefix", async () => {
+    // An empty string is a prefix of every id, so without the explicit guard the UUID lane
+    // would answer `prefix "" is ambiguous (matches 6)` — true, and useless.
+    await expect(resolveProjectRef("", allProjects)).rejects.toThrow(/^No project matches ""\.$/);
     await expect(resolveProjectRef("   ", allProjects)).rejects.toThrow(/No project matches/);
+  });
+
+  it("keeps the wantedSlug guard load-bearing: an all-hyphen input folds to an empty key", async () => {
+    // `---` is non-empty, so it survives the empty-input guard, but its slug key (hyphens
+    // stripped) is "". Projects with no custom ID fold to an empty key too — so without the
+    // `if (wantedSlug)` guard this input would "exactly match" Charlie *and* Delta and
+    // report a custom-ID ambiguity. It must fall through to the UUID lane instead.
+    await expect(resolveProjectRef("---", allProjects)).rejects.toThrow(
+      /No project matches "---"/
+    );
+  });
+
+  it("trims paste artifacts on both lanes alike", async () => {
+    // Before the shared trim, `" my-band "` resolved (refKey trims while building its
+    // comparison key) while `" <uuid> "` did not (the UUID lane compares raw bytes) — an
+    // asymmetry with no justification when "paste it anywhere" is the point of the feature.
+    const byCustom = await resolveProjectRef("  my-band \n", allProjects);
+    expect(byCustom.name).toBe("Bravo");
+    const byUuid = await resolveProjectRef("  dddd4444-4444-4444-8444-444444444444\n", allProjects);
+    expect(byUuid.name).toBe("Delta");
+    const byPrefix = await resolveProjectRef(" eeee5555 ", allProjects);
+    expect(byPrefix.name).toBe("Echo");
+  });
+
+  it("ANSI-sanitizes the ids it interpolates into ambiguity errors", async () => {
+    // A project id / custom ID is content an admin of that project controls, and these
+    // messages reach stderr through formatApiError, which does no sanitizing of its own.
+    const evil = [
+      { id: "aaaa1111-1111-4111-8111-111111111111", customId: "cafe" },
+      { id: "cafe0000-0000-4000-8000-00000000000\u001b[31m1" },
+    ];
+    const err = await resolveProjectRef("cafe", async () => evil).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/ambiguous/i);
+    expect((err as Error).message).not.toContain("\u001b");
   });
 
   it("accepts the `synchain-<uuid>` shape the web Copy ID button yields", async () => {
@@ -234,8 +268,10 @@ describe("resolveProjectRef", () => {
   });
 
   it("NFKC-folds the custom-ID comparison key (full-width input resolves in a browser too)", async () => {
-    // Normalization is fixed as trim → NFKC → reject non-ASCII → toLowerCase, with NFKC
-    // first precisely so full-width input folds rather than being rejected. `ｍｙ－ｂａｎｄ`
+    // The comparison key folds only: trim → NFKC → toLowerCase. NFKC comes first precisely
+    // so full-width input folds instead of missing. (Whether a string may be *claimed* —
+    // ASCII-only, shape, reserved words — is the server's call, never this package's;
+    // duplicating those rules here is what would let the two drift apart.) `ｍｙ－ｂａｎｄ`
     // pasted from a CJK IME resolves on the web; without folding here the CLI would answer
     // "no such project" — one string, two entry points, opposite answers.
     const r = await resolveProjectRef("ｍｙ－ｂａｎｄ", allProjects);

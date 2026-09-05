@@ -46,7 +46,12 @@ synchain project use <id-or-prefix-or-custom-id>
 ```
 
 All later commands use the active project unless you pass `--project <id>`. The canonical
-id is a UUID; the 8-char prefix printed by `ls` is accepted and resolved for you.
+id is a UUID; the 8-char prefix printed by `ls` is accepted and resolved for you **by
+`project use`**.
+
+⚠️ **`--project <id>` does no resolving** — it goes straight to the API, which accepts
+UUIDs only. Automation should pass the full `projects[].id`; a prefix or custom ID there
+returns a server 400/404, not a CLI-side error.
 
 A project may also carry a short **custom ID** (`customId`, `null` when unset). `project
 use` accepts it, hyphens do not affect matching (`my-band` == `myband`), and it is matched
@@ -69,7 +74,7 @@ Response shapes:
 
 | Command                | stdout JSON                                          |
 | ---------------------- | ---------------------------------------------------- |
-| `whoami --json`        | `{ user, projects, activeProject }`                  |
+| `whoami --json`        | `{ user, projects: [{ …, customId }], activeProject }` |
 | `project ls --json`    | `{ projects: [{ id, name, role, customId }] }`       |
 | `files ls --json`      | `{ files: [{ id, name, size, mimeType, folderId, … }] }` |
 | `folders ls --json`    | `{ folders: [{ id, name, parentId, … }] }`           |

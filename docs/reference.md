@@ -97,9 +97,17 @@ synchain project use 3f9a1c2b        # a full UUID or a unique 8-char prefix
 synchain project use my-band         # or the project's custom ID
 ```
 
-Or pass `--project <id>` per command. Every project has a canonical UUID, and anywhere an
-id is expected you may use the 8-character prefix the `ls` commands print (it is resolved
-to the full UUID for you; ambiguous prefixes fail with a clear message).
+Or pass `--project <id>` per command.
+
+Every project has a canonical UUID. **`project use` resolves what you type**; it accepts a
+full UUID, a unique 8-character prefix, `synchain-<uuid>`, or the project's custom ID, and
+an ambiguous input fails with a clear message naming the candidates. What it stores is
+always the canonical UUID.
+
+⚠️ **`--project <id>` does no resolving** — it passes the value straight to the API, which
+accepts UUIDs only. Give it the full UUID (from `synchain project ls --json`, field
+`projects[].id`); a prefix or a custom ID there gets a 400/404 from the server rather than
+a CLI-side message.
 
 A project may **also** have a short **custom ID** claimed on the web — a name you can say
 out loud, such as `my-band`. `project use` accepts it, and the `ref` column of

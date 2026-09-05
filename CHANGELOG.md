@@ -19,8 +19,8 @@ Adds custom project IDs to `project use` / `project ls`.
     UUID-only affair.
   - Input is folded with `trim` → `NFKC` → `toLowerCase`, so a full-width `ｍｙ－ｂａｎｄ`
     pasted from a CJK IME resolves the same way it does in a browser.
-- `synchain-<uuid>` is now accepted wherever a project id is: that is what the web
-  "Copy ID" button yields for a project with no custom ID.
+- `synchain-<uuid>` is now accepted by `project use`: that is what the web "Copy ID"
+  button yields for a project with no custom ID.
 - Consumes the optional `customId` field of `projects[]` in `/api/user/me`. Contract
   record: `docs/contract-changes/20260905-project-custom-id.md`.
 
