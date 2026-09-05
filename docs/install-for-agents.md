@@ -41,7 +41,7 @@ Authorization: Bearer synch_live_sk_…
 ## 3. Select a project
 
 ```bash
-synchain project ls --json        # → { "projects": [ { "id", "name", "role", "customId?" } ] }
+synchain project ls --json        # → { projects: [ { id, name, role, customId? } ] }
 synchain project use <id-or-prefix-or-custom-id>
 ```
 
@@ -54,11 +54,11 @@ UUIDs only. Automation should pass the full `projects[].id`; a prefix or custom 
 returns a server 400/404, not a CLI-side error.
 
 A project may also carry a short **custom ID**. The `customId` field is `null` when the
-project never set one, and is **absent entirely** when the server predates the feature --
+project never set one, and is **absent entirely** when the server predates the feature —
 `project ls --json` passes the API payload through verbatim, so treat the field as optional
-and fall back to `id`. `project
-use` accepts it, hyphens do not affect matching (`my-band` == `myband`), and it is matched
-exactly — never by prefix. **Always keep `projects[].id` for automation**: the UUID is
+and fall back to `id`.
+`project use` accepts it, hyphens do not affect matching (`my-band` == `myband`), and it is
+matched exactly — never by prefix. **Always keep `projects[].id` for automation**: the UUID is
 canonical and stable, whereas a custom ID is optional and can be changed by a project
 admin.
 
