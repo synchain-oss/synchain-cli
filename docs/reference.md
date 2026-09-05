@@ -93,12 +93,29 @@ Most commands act on an **active project**. Set it once:
 
 ```bash
 synchain project ls                 # list projects you can access + your role
-synchain project use 3f9a1c2b        # accept a full UUID or a unique 8-char prefix
+synchain project use 3f9a1c2b        # a full UUID or a unique 8-char prefix
+synchain project use my-band         # or the project's custom ID
 ```
 
-Or pass `--project <id>` per command. Project ids are UUIDs; anywhere an id is expected
-you may use the 8-character prefix the `ls` commands print (it is resolved to the full
-UUID for you; ambiguous prefixes fail with a clear message).
+Or pass `--project <id>` per command. Every project has a canonical UUID, and anywhere an
+id is expected you may use the 8-character prefix the `ls` commands print (it is resolved
+to the full UUID for you; ambiguous prefixes fail with a clear message).
+
+A project may **also** have a short **custom ID** claimed on the web — a name you can say
+out loud, such as `my-band`. `project use` accepts it, and the `ref` column of
+`project ls` prints it when there is one (falling back to the 8-char UUID prefix
+otherwise), so that column always pastes straight back into `project use`.
+
+Three things worth knowing about custom IDs:
+
+- **Hyphens do not count.** `my-band` and `myband` are the same ID — the spoken form is
+  what matters, since you cannot hear a hyphen over the phone.
+- **Matched exactly, never by prefix.** `my-b` does not resolve to `my-band`. Prefix
+  matching stays a UUID-only affair.
+- **The UUID remains the canonical id.** `project use` always writes the UUID into your
+  config, custom IDs never reach an API path, and a custom ID that also happens to be a
+  prefix of some project's UUID reports an ambiguity error naming both candidates rather
+  than picking one.
 
 ---
 
@@ -304,6 +321,9 @@ and print a human-readable message to stderr.
   (account) or ask a project admin to enable it (project).
 - **`No project selected.`** — run `synchain project use <id>` or pass `--project <id>`.
 - **Ambiguous prefix** — use more characters or the full UUID.
+- **`"<x>" is ambiguous: it is the custom ID of project … and also a UUID prefix of …`** —
+  one string means two different projects. Use the full UUID (from
+  `synchain project ls --json`).
 
 ---
 

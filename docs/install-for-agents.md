@@ -41,12 +41,18 @@ Authorization: Bearer synch_live_sk_…
 ## 3. Select a project
 
 ```bash
-synchain project ls --json        # → { "projects": [ { "id", "name", "role" } ] }
-synchain project use <id-or-prefix>
+synchain project ls --json        # → { "projects": [ { "id", "name", "role", "customId" } ] }
+synchain project use <id-or-prefix-or-custom-id>
 ```
 
-All later commands use the active project unless you pass `--project <id>`. Ids are
-UUIDs; the 8-char prefix printed by `ls` is accepted and resolved for you.
+All later commands use the active project unless you pass `--project <id>`. The canonical
+id is a UUID; the 8-char prefix printed by `ls` is accepted and resolved for you.
+
+A project may also carry a short **custom ID** (`customId`, `null` when unset). `project
+use` accepts it, hyphens do not affect matching (`my-band` == `myband`), and it is matched
+exactly — never by prefix. **Always keep `projects[].id` for automation**: the UUID is
+canonical and stable, whereas a custom ID is optional and can be changed by a project
+admin.
 
 ## 4. Machine-readable output
 
@@ -64,7 +70,7 @@ Response shapes:
 | Command                | stdout JSON                                          |
 | ---------------------- | ---------------------------------------------------- |
 | `whoami --json`        | `{ user, projects, activeProject }`                  |
-| `project ls --json`    | `{ projects: [{ id, name, role }] }`                 |
+| `project ls --json`    | `{ projects: [{ id, name, role, customId }] }`       |
 | `files ls --json`      | `{ files: [{ id, name, size, mimeType, folderId, … }] }` |
 | `folders ls --json`    | `{ folders: [{ id, name, parentId, … }] }`           |
 | `calendar ls --json`   | `{ events: [{ id, title, startTime, endTime, tag, … }], isAdmin }` |
