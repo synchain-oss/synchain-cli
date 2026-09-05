@@ -254,12 +254,22 @@ describe("formatApiError", () => {
     expect(out).toContain("forbidden");
   });
 
-  it("keeps newlines and tabs in a multi-line error body", () => {
+  it("keeps newlines in a multi-line body but indents every continuation line", () => {
     // sanitizeBlock, not sanitizeInline: an error body is legitimately multi-line, and folding
-    // its newlines into spaces would mangle a stack trace.
+    // its newlines into spaces would mangle a stack trace. Keeping them makes line structure
+    // its own question — an unindented second line is indistinguishable from the CLI's own
+    // output, and colour is no defence under NO_COLOR or a non-TTY, which is exactly where an
+    // agent parses stderr.
     expect(formatApiError(new ApiError(500, "https://x", "line one\nline two"))).toBe(
-      "API error 500 https://x\n  line one\nline two"
+      "API error 500 https://x\n  line one\n  line two"
     );
+  });
+
+  it("caps a runaway error body", () => {
+    // Diagnostic, not a payload: an unbounded body can bury whatever the user needed to read.
+    const out = formatApiError(new ApiError(500, "https://x", "a".repeat(5000)));
+    expect(out.length).toBeLessThan(2200);
+    expect(out).toContain("aaaa");
   });
 
   it("returns the message for a generic Error", () => {
