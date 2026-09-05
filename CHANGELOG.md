@@ -4,6 +4,41 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-09-05
+
+Adds custom project IDs to `project use` / `project ls`.
+
+### Added
+- **Custom project IDs.** A project may now carry a short, sayable custom ID (e.g.
+  `my-band`) alongside its canonical UUID. `project use` accepts it, and `project ls`
+  prints it in the renamed `ref` column, so that column pastes straight back into
+  `project use`.
+  - Hyphens do not count toward matching: `my-band` and `myband` are the same ID,
+    matching the server's own uniqueness key. The spoken form is what matters.
+  - Custom IDs are matched **exactly, never by prefix**; prefix matching stays a
+    UUID-only affair.
+  - Input is folded with `trim` → `NFKC` → `toLowerCase`, so a full-width `ｍｙ－ｂａｎｄ`
+    pasted from a CJK IME resolves the same way it does in a browser.
+- `synchain-<uuid>` is now accepted wherever a project id is: that is what the web
+  "Copy ID" button yields for a project with no custom ID.
+- Consumes the optional `customId` field of `projects[]` in `/api/user/me`. Contract
+  record: `docs/contract-changes/20260905-project-custom-id.md`.
+
+### Changed
+- `project ls` renames its `id` column to `ref`, since it may now print a custom ID
+  rather than a UUID prefix. `--json` output is unaffected (it still carries the full
+  `id`, plus `customId` when the server sends it).
+
+### Security
+- Custom IDs and UUIDs are resolved from **separate candidate pools**. Sharing one
+  `startsWith` pool would not error — it would silently switch to the wrong project, so
+  every later `files rm` would land in someone else's. After a custom-ID hit the UUID pool
+  is still consulted, and a collision in either direction reports an ambiguity error naming
+  both full UUIDs instead of guessing.
+- `project use` asserts that what it persists is a canonical UUID. A custom ID is mutable
+  and never belongs in an API path; storing one would leave a later command firing at a
+  string that no longer points at this project.
+
 ## [0.6.0] - 2026-08-14
 
 Second public release. Skips 0.5.x (those versions belong to the old monorepo

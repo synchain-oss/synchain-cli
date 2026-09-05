@@ -20,7 +20,15 @@ export interface MeResponse {
     displayName: string | null;
     avatarUrl: string | null;
   };
-  projects: Array<{ id: string; name: string; role: string }>;
+  // `customId` is the short custom ID claimed on the web (null when never set).
+  // **Declaring it optional is load-bearing**: the CLI is released independently with no
+  // auto-publish, so "new CLI against an older server" is a permanent condition, and such
+  // a server does not return the key at all. `apiFetch` is a bare `res.json() as T` with
+  // no runtime schema validation, so marking it required would just make the type lie —
+  // consumers have to handle `undefined` themselves. The converse holds too: an older CLI
+  // against a newer server quietly ignores the extra key, which makes the server side of
+  // this purely additive.
+  projects: Array<{ id: string; name: string; role: string; customId?: string | null }>;
 }
 
 /** A friendly label for the signed-in user (display name → username → email → id). */
