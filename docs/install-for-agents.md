@@ -41,7 +41,7 @@ Authorization: Bearer synch_live_sk_…
 ## 3. Select a project
 
 ```bash
-synchain project ls --json        # → { "projects": [ { "id", "name", "role", "customId" } ] }
+synchain project ls --json        # → { "projects": [ { "id", "name", "role", "customId?" } ] }
 synchain project use <id-or-prefix-or-custom-id>
 ```
 
@@ -53,7 +53,10 @@ id is a UUID; the 8-char prefix printed by `ls` is accepted and resolved for you
 UUIDs only. Automation should pass the full `projects[].id`; a prefix or custom ID there
 returns a server 400/404, not a CLI-side error.
 
-A project may also carry a short **custom ID** (`customId`, `null` when unset). `project
+A project may also carry a short **custom ID**. The `customId` field is `null` when the
+project never set one, and is **absent entirely** when the server predates the feature --
+`project ls --json` passes the API payload through verbatim, so treat the field as optional
+and fall back to `id`. `project
 use` accepts it, hyphens do not affect matching (`my-band` == `myband`), and it is matched
 exactly — never by prefix. **Always keep `projects[].id` for automation**: the UUID is
 canonical and stable, whereas a custom ID is optional and can be changed by a project
@@ -70,12 +73,12 @@ synchain discussion ls --limit 20 --json | jq '.posts[] | {id, title, replyCount
 synchain calendar ls --json | jq '.events[].id'
 ```
 
-Response shapes:
+Response shapes (`?` marks a field older servers omit entirely):
 
 | Command                | stdout JSON                                          |
 | ---------------------- | ---------------------------------------------------- |
-| `whoami --json`        | `{ user, projects: [{ …, customId }], activeProject }` |
-| `project ls --json`    | `{ projects: [{ id, name, role, customId }] }`       |
+| `whoami --json`        | `{ user, projects: [{ …, customId? }], activeProject }` |
+| `project ls --json`    | `{ projects: [{ id, name, role, customId? }] }`      |
 | `files ls --json`      | `{ files: [{ id, name, size, mimeType, folderId, … }] }` |
 | `folders ls --json`    | `{ folders: [{ id, name, parentId, … }] }`           |
 | `calendar ls --json`   | `{ events: [{ id, title, startTime, endTime, tag, … }], isAdmin }` |
