@@ -101,8 +101,9 @@ Or pass `--project <id>` per command.
 
 Every project has a canonical UUID. **`project use` resolves what you type**; it accepts a
 full UUID, a unique 8-character prefix, `synchain-<uuid>`, or the project's custom ID. An
-ambiguous input always fails rather than picking a project for you, and says how many
-candidates it matched. What it stores is always the canonical UUID.
+ambiguous input always fails rather than picking a project for you, and the message says
+what it matched — the specific projects when a custom ID collides with someone's UUID,
+a count otherwise. What it stores is always the canonical UUID.
 
 ⚠️ **`--project <id>` does no resolving** — it passes the value straight to the API, which
 accepts UUIDs only. Give it the full UUID (from `synchain project ls --json`, field
