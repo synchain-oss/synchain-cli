@@ -244,6 +244,24 @@ describe("formatApiError", () => {
     );
   });
 
+  it("strips ANSI escapes from a text/plain error body", () => {
+    // `readJsonOrText` falls back to `res.text()` whenever the content-type is not JSON, so
+    // this branch carries raw server text — and it is the *failure* path, reachable without
+    // ever getting past authentication (a `--base-url` pointed at a hostile server is enough).
+    const body = "\u001b[2K\rforbidden\u001b]0;pwned\u0007";
+    const out = formatApiError(new ApiError(403, "https://x", body));
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("forbidden");
+  });
+
+  it("keeps newlines and tabs in a multi-line error body", () => {
+    // sanitizeBlock, not sanitizeInline: an error body is legitimately multi-line, and folding
+    // its newlines into spaces would mangle a stack trace.
+    expect(formatApiError(new ApiError(500, "https://x", "line one\nline two"))).toBe(
+      "API error 500 https://x\n  line one\nline two"
+    );
+  });
+
   it("returns the message for a generic Error", () => {
     expect(formatApiError(new Error("boom"))).toBe("boom");
   });

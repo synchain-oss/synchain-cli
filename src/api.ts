@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
+import { sanitizeBlock } from "./util/sanitize.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 
 /** Typed error thrown by apiFetch on non-2xx responses. */
@@ -131,12 +132,27 @@ export function resolveActiveProject(
   throw new Error("No project selected. Pass --project <id> or run `synchain project use <id>`.");
 }
 
-/** Pretty-prints an ApiError (or any error) for console output. */
+/**
+ * Pretty-prints an ApiError (or any error) for console output.
+ *
+ * The body is ANSI-sanitized, and this is the **most reachable** sanitizing point in the CLI,
+ * not the least: every command funnels its failure path through here, and unlike the success
+ * paths it does not require getting past authentication first. `readJsonOrText` falls back to
+ * `res.text()` whenever the content-type is not JSON, so a `text/plain` 4xx from a compromised
+ * deployment — or from whatever server a user was talked into pointing `--base-url` at — would
+ * otherwise land in the terminal verbatim. (The JSON branch was already safe: `JSON.stringify`
+ * escapes control characters. `err.url` is safe too — every id interpolated into a path goes
+ * through `encodeURIComponent`, which turns an ESC into `%1B`.)
+ *
+ * `sanitizeBlock`, not `sanitizeInline`: an error body is legitimately multi-line, and folding
+ * its newlines into spaces would mangle a stack trace or a wrapped message. Blocks keep newlines
+ * and tabs, drop CR, and strip every escape sequence — exactly what an error body needs.
+ */
 export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
     const bodyStr =
       typeof err.body === "string" ? err.body : err.body ? JSON.stringify(err.body) : "";
-    return `API error ${err.status} ${err.url}${bodyStr ? `\n  ${bodyStr}` : ""}`;
+    return `API error ${err.status} ${err.url}${bodyStr ? `\n  ${sanitizeBlock(bodyStr)}` : ""}`;
   }
   if (err instanceof Error) return err.message;
   return String(err);
