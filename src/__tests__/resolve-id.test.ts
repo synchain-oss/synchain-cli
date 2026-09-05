@@ -135,6 +135,32 @@ describe("resolveProjectRef", () => {
     expect((err as Error).message).toContain("dddd4444-4444-4444-8444-444444444444");
   });
 
+  it("applies the shadow gate on the spoken form too, so hyphens cannot buy a silent answer", async () => {
+    // The gate must be at least as broad as the lane it guards. Lane (1) matches on the
+    // spoken form, so it has already declared `ca-fe` and `cafe` to be one identifier — if
+    // the gate only asked the literal question, `cafe` would report the collision while
+    // `ca-fe` resolved silently to Golf. The user would be choosing between "warned" and
+    // "silently landed elsewhere" by guessing where a hyphen goes.
+    const hyphenated = [
+      { id: "aaaa1111-1111-4111-8111-111111111111", name: "Golf", customId: "ca-fe" },
+      { id: "cafe0000-0000-4000-8000-000000000001", name: "Hotel" },
+    ];
+    for (const input of ["cafe", "ca-fe"]) {
+      const err = await resolveProjectRef(input, async () => hyphenated).catch((e: Error) => e);
+      expect(err, `input ${input}`).toBeInstanceOf(Error);
+      expect((err as Error).message, `input ${input}`).toMatch(/ambiguous/i);
+      expect((err as Error).message).toContain("cafe0000-0000-4000-8000-000000000001");
+    }
+  });
+
+  it("does not widen the shadow gate for custom IDs that cannot prefix a UUID", async () => {
+    // `my-band` folds to `myband`, which contains non-hex characters and so cannot be the
+    // prefix of any UUID. Widening the gate must not turn ordinary custom IDs into
+    // ambiguity errors.
+    const r = await resolveProjectRef("my-band", allProjects);
+    expect(r.name).toBe("Bravo");
+  });
+
   it("matches on the spoken form: hyphen-less `myband` must hit `my-band`", async () => {
     // This is the entire reason the feature exists: someone reads "my band" to you over
     // the phone and you cannot hear whether they typed a hyphen. The server's unique index

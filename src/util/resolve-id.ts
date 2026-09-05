@@ -252,14 +252,30 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
     if (hits.length === 1) {
       const hit = hits[0]!;
       // Cross-namespace shadow check (see above): after a hit we **must** look at the UUID
-      // pool too. Compare using the folded `wanted`, not the raw input — canonical ids are
+      // pool too. Both comparisons use folded keys, not the raw input — canonical ids are
       // lowercase, so testing an upper-case input with `startsWith` would simply miss, and
       // missing is the very outcome this gate exists to prevent.
-      // ⚠ This uses `wanted` (**hyphens kept**), not `wantedSlug`: UUIDs carry hyphens, so
-      // a hyphen-stripped key would turn the gate into noise. `wanted` is necessarily
-      // non-null whenever `wantedSlug` is (stripping only shortens); the guard is there for
-      // the type narrowing.
-      const shadowed = wanted ? all.filter((p) => p !== hit && p.id.startsWith(wanted)) : [];
+      //
+      // **Both forms are asked, and that is the point.** Lane (1) has just declared `ca-fe`
+      // and `cafe` to be one and the same identifier (that is what matching on the spoken
+      // form *means*). If the gate asked only the literal question, the two spellings would
+      // get opposite answers: `cafe` reports the collision with a project whose UUID starts
+      // `cafe`, while `ca-fe` — the same identifier by lane (1)'s own rule — resolves
+      // silently to the custom-ID holder. A gate must be at least as broad as the lane it
+      // guards, or the user picks which answer they get by guessing where a hyphen goes.
+      //
+      // Asking the hyphen-stripped form as well can only ever produce **more** ambiguity
+      // errors, never resolve to a different project — it widens "stop and ask", nothing
+      // else. And it stays quiet in practice: a custom ID with any non-hex character has a
+      // slug key that cannot prefix any UUID, so this second test only fires for exactly the
+      // hex-shaped strings that create the hazard.
+      //
+      // `wanted` is necessarily non-null whenever `wantedSlug` is (stripping only shortens);
+      // the `??` is for the type narrowing.
+      const literal = wanted ?? wantedSlug;
+      const shadowed = all.filter(
+        (p) => p !== hit && (p.id.startsWith(literal) || p.id.startsWith(wantedSlug))
+      );
       if (shadowed.length > 0) {
         throw new Error(
           `"${sanitizeInline(raw)}" is ambiguous: it is the custom ID of project ${sanitizeInline(
