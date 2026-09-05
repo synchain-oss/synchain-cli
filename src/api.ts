@@ -132,6 +132,9 @@ export function resolveActiveProject(
   throw new Error("No project selected. Pass --project <id> or run `synchain project use <id>`.");
 }
 
+/** Cap on the error body that reaches the terminal, measured after indenting. */
+const MAX_ERROR_BODY = 2000;
+
 /**
  * Pretty-prints an ApiError (or any error) for console output.
  *
@@ -156,16 +159,24 @@ export function resolveActiveProject(
  * Colour is not a defence here — under `NO_COLOR` or a non-TTY, picocolors emits nothing, and
  * a non-TTY is exactly where an agent is parsing stderr.
  *
- * And the body is capped. An error body is diagnostic, not a payload; an unbounded one can bury
- * whatever the user actually needed to read.
+ * And the body is capped, with the cut marked. An error body is diagnostic, not a payload; an
+ * unbounded one buries whatever the user actually needed to read. The marker matters as much as
+ * the cap: a truncated JSON body is syntactically broken, and unlabelled it reads as the server
+ * having returned malformed data.
  */
-const MAX_ERROR_BODY = 2000;
-
 export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
     const raw = typeof err.body === "string" ? err.body : err.body ? JSON.stringify(err.body) : "";
-    const clean = sanitizeBlock(raw).slice(0, MAX_ERROR_BODY);
-    const bodyStr = clean.replace(/\n/g, "\n  ");
+    // Order: sanitize → indent → truncate. The cap has to measure what actually reaches the
+    // terminal, and indenting adds two characters per line — capping first, a body of 2000
+    // newlines would still print ~6000 characters across 1000 lines, and newlines are the
+    // cheapest way to push what the user needed to read off the screen. Truncating last is safe
+    // because sanitizing has already removed every escape, so a cut cannot leave a bare ESC.
+    const indented = sanitizeBlock(raw).replace(/\n/g, "\n  ");
+    const bodyStr =
+      indented.length > MAX_ERROR_BODY
+        ? `${indented.slice(0, MAX_ERROR_BODY)}\n  … [truncated]`
+        : indented;
     return `API error ${err.status} ${err.url}${bodyStr ? `\n  ${bodyStr}` : ""}`;
   }
   if (err instanceof Error) return err.message;
