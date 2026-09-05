@@ -213,11 +213,15 @@ describe("resolveProjectRef", () => {
     );
   });
 
-  it("rejects empty / whitespace-only input with a message about the input, not a bogus prefix", async () => {
+  it("rejects empty / whitespace-only input instead of reporting a bogus empty prefix", async () => {
     // An empty string is a prefix of every id, so without the explicit guard the UUID lane
     // would answer `prefix "" is ambiguous (matches 6)` — true, and useless.
+    // Whitespace-only input reports the same message: the guard runs on the trimmed string,
+    // so both quote `""`.
     await expect(resolveProjectRef("", allProjects)).rejects.toThrow(/^No project matches ""\.$/);
-    await expect(resolveProjectRef("   ", allProjects)).rejects.toThrow(/No project matches/);
+    await expect(resolveProjectRef("   ", allProjects)).rejects.toThrow(
+      /^No project matches ""\.$/
+    );
   });
 
   it("keeps the wantedSlug guard load-bearing: an all-hyphen input folds to an empty key", async () => {

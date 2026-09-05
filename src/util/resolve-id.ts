@@ -218,8 +218,11 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
     // every id, so the UUID lane would answer `prefix "" is ambiguous (matches N)`, which
     // tells the user nothing about what they actually did wrong.
     // Placed **before** `fetchAll()`: nothing a project list could contain changes this
-    // answer, so paying a round-trip for it is pure waste. The message quotes `raw`, the
-    // same string the two ambiguity errors below quote.
+    // answer, so an input this malformed should not depend on fetching one. (Today's only
+    // caller has already fetched by the time it gets here and passes a closure over the
+    // result, so no request is actually saved -- the ordering is about keeping argument
+    // validation separate from lookup failure, and about a lazy `fetchAll` costing nothing.)
+    // The message quotes `raw`, the same string the two ambiguity errors below quote.
     throw new Error(`No project matches "${sanitizeInline(raw)}".`);
   }
 

@@ -68,6 +68,17 @@ describe("activeProjectLine", () => {
     expect(out).toContain("cafe0000");
   });
 
+  it("sanitizes the id before slicing, so the cut cannot leave a bare ESC", () => {
+    // `project use` only started asserting the id is a canonical UUID in this release; 0.6.0
+    // wrote through whatever the server sent, so a poisoned id can already be sitting in a
+    // config on disk — and 8 characters is room enough for an erase-line sequence.
+    // Asserted against the injected sequence rather than "no ESC at all": the colours
+    // picocolors adds are the CLI's own and are not a vector.
+    const out = activeProjectLine({ id: `${ESC}[2Kcafe0000-0000-4000-8000-000000000001` });
+    expect(out).not.toContain(`${ESC}[2K`);
+    expect(out).toContain("(cafe0000)");
+  });
+
   it("strips ANSI escapes from the persisted name", () => {
     // This is the one place such a payload is *persisted* and replayed: `project use` wrote
     // the name into config.json, so without sanitizing here every later `synchain whoami`

@@ -24,7 +24,13 @@ export interface WhoamiFlags {
  */
 export function activeProjectLine(active: { id: string; name?: string | null }): string {
   const label = pc.bold(sanitizeInline(active.name ?? active.id));
-  return `Active project: ${label} (${active.id.slice(0, 8)})`;
+  // The id is sanitized too, and **before** slicing so the cut can never land mid-escape and
+  // emit a bare ESC. It looks like it could not need this -- `project use` now asserts the id
+  // is a canonical UUID before saving -- but that assertion is new in this release: 0.6.0
+  // wrote through whatever the server sent, so a poisoned id may already be sitting in a
+  // config on disk, and 8 characters is room enough for an erase-line sequence.
+  const short = sanitizeInline(active.id).slice(0, 8);
+  return `Active project: ${label} (${short})`;
 }
 
 export async function runWhoami(flags: WhoamiFlags): Promise<void> {
@@ -47,8 +53,11 @@ export async function runWhoami(flags: WhoamiFlags): Promise<void> {
       );
       return;
     }
-    const suffix = me.user.email ? ` (${me.user.email})` : "";
-    console.log(`Logged in as ${pc.bold(userLabel(me.user))}${suffix}`);
+    // Sanitized for consistency with the output-boundary rule stated above, even though these
+    // are the signed-in user's *own* profile fields (self-inflicted at worst, not
+    // cross-tenant): an exception one line from the rule only confuses the next reader.
+    const suffix = me.user.email ? ` (${sanitizeInline(me.user.email)})` : "";
+    console.log(`Logged in as ${pc.bold(sanitizeInline(userLabel(me.user)))}${suffix}`);
     const active = cfg?.activeProject;
     if (active?.id) {
       console.log(activeProjectLine(active));
