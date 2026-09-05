@@ -172,6 +172,23 @@ describe("resolveProjectRef", () => {
     }
   });
 
+  it("folds case on both sides of the shadow gate, not just the input", async () => {
+    // `projectRefLabel` prints an id verbatim, so an upper-case id gives a `ref` column the
+    // user copies as-is. Lane (1) folds it and hits the custom-ID holder; a gate that folded
+    // only hyphens would compare "CAFE0000...".startsWith("cafe0000") === false and return
+    // that holder silently -- the "one table, two rows, same identifier" case walked past.
+    const upperId = [
+      { id: "aaaa1111-1111-4111-8111-111111111111", name: "Kilo", customId: "cafe0000" },
+      { id: "CAFE0000-0000-4000-8000-000000000001", name: "Lima" },
+      // A degenerate id whose spoken form is empty. It cannot shadow anything, and the gate
+      // must treat it as "no match" rather than letting an empty key prefix-match everything.
+      { id: "---", name: "Mike" },
+    ];
+    const err = await resolveProjectRef("cafe0000", async () => upperId).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/ambiguous/i);
+  });
+
   it("does not widen the shadow gate for custom IDs that cannot prefix a UUID", async () => {
     // `my-band` folds to `myband`, which contains non-hex characters and so cannot be the
     // prefix of any UUID. Widening the gate must not turn ordinary custom IDs into
