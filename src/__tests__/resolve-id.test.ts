@@ -153,6 +153,25 @@ describe("resolveProjectRef", () => {
     }
   });
 
+  it("applies the shadow gate when the id's own hyphens are the ones in the way", async () => {
+    // The mirror image of the case above, and the more dangerous half: here it is the *id*
+    // that carries hyphens the input does not. Testing a stripped input against a raw id
+    // misses it — `dddd44444444` is not a prefix of `dddd4444-4444-…` — so the hyphen-less
+    // spelling would resolve silently while the hyphenated one reported the collision. The
+    // spoken channel is exactly where hyphens get dropped, so the unprotected spelling is
+    // the one people actually type. Both sides have to be folded.
+    const hyphenatedId = [
+      { id: "aaaa1111-1111-4111-8111-111111111111", name: "India", customId: "dddd4444-4444" },
+      { id: "dddd4444-4444-4444-8444-444444444444", name: "Juliet" },
+    ];
+    for (const input of ["dddd4444-4444", "dddd44444444"]) {
+      const err = await resolveProjectRef(input, async () => hyphenatedId).catch((e: Error) => e);
+      expect(err, `input ${input}`).toBeInstanceOf(Error);
+      expect((err as Error).message, `input ${input}`).toMatch(/ambiguous/i);
+      expect((err as Error).message).toContain("dddd4444-4444-4444-8444-444444444444");
+    }
+  });
+
   it("does not widen the shadow gate for custom IDs that cannot prefix a UUID", async () => {
     // `my-band` folds to `myband`, which contains non-hex characters and so cannot be the
     // prefix of any UUID. Widening the gate must not turn ordinary custom IDs into

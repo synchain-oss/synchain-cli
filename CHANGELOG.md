@@ -38,11 +38,13 @@ Adds custom project IDs to `project use` / `project ls`.
 - `project use` asserts that what it persists is a canonical UUID. A custom ID is mutable
   and never belongs in an API path; storing one would leave a later command firing at a
   string that no longer points at this project.
-- The cross-namespace shadow check is applied on the spoken form as well as the literal one.
-  Matching custom IDs on the hyphen-stripped form declares `ca-fe` and `cafe` to be one
-  identifier, so the collision gate has to treat them as one too — otherwise the two
-  spellings get opposite answers and a user picks between "warned" and "silently landed on
-  another project" by guessing where a hyphen goes.
+- The cross-namespace shadow check folds **both sides** to the spoken form. Matching custom
+  IDs on the hyphen-stripped form declares `ca-fe` and `cafe` to be one identifier, so the
+  collision gate has to treat them as one too — otherwise the two spellings get opposite
+  answers and a user picks between "warned" and "silently landed on another project" by
+  guessing where a hyphen goes. Folding one side is not enough: the hyphens may be the id's
+  rather than the input's, and that half is the more dangerous one, since the spoken channel
+  is exactly where hyphens get dropped.
 - Server-derived strings printed by `project use` and `whoami` are now ANSI-sanitized. The
   `ref` column of `project ls` always was (via `renderTable`), but `project use` had no such
   funnel, and the project name it writes into `config.json` was replayed unsanitized by every
