@@ -136,9 +136,11 @@ function refKey(value: string | null | undefined): string | null {
  * Uniqueness is the server's guarantee, so at most one row in a given user's project
  * list can match.
  *
- * ⚠ **Only ever compare custom IDs with this — never UUIDs.** UUIDs carry their own
- * hyphens, and stripping them changes what `startsWith` means. The UUID lane keeps using
- * `refKey`.
+ * ⚠ **Never compare a key built with this against an id that has not been stripped too.**
+ * UUIDs carry their own hyphens, so a stripped key tested against a raw id silently stops
+ * matching (`dddd44444444` is not a prefix of `dddd4444-4444-…`). Either both sides are in
+ * the spoken form or neither is — the cross-namespace gate in {@link resolveProjectRef}
+ * strips both, and the UUID lane strips neither.
  */
 function slugKeyOf(value: string | null | undefined): string | null {
   const key = refKey(value)?.replace(/-/g, "");
@@ -232,11 +234,10 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
   // **spoken form** (hyphens stripped, the same key the server uses), not byte-for-byte:
   // `neontide` must hit `neon-tide`, or the CLI and the browser answer one string
   // differently.
-  const wanted = refKey(raw); // UUID-lane key: hyphens kept
   // Still guarded: a non-empty input can fold to an empty slug key when it is all hyphens
   // (`---`). Without the guard such an input would "exactly match" every project that has
   // no custom ID at all.
-  const wantedSlug = slugKeyOf(raw); // custom-ID-lane key: hyphens stripped
+  const wantedSlug = slugKeyOf(raw); // spoken-form key: hyphens stripped
   if (wantedSlug) {
     const hits = all.filter((p) => slugKeyOf(p.customId) === wantedSlug);
     if (hits.length > 1) {
@@ -256,25 +257,31 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       // lowercase, so testing an upper-case input with `startsWith` would simply miss, and
       // missing is the very outcome this gate exists to prevent.
       //
-      // **Both forms are asked, and that is the point.** Lane (1) has just declared `ca-fe`
-      // and `cafe` to be one and the same identifier (that is what matching on the spoken
-      // form *means*). If the gate asked only the literal question, the two spellings would
-      // get opposite answers: `cafe` reports the collision with a project whose UUID starts
-      // `cafe`, while `ca-fe` — the same identifier by lane (1)'s own rule — resolves
-      // silently to the custom-ID holder. A gate must be at least as broad as the lane it
-      // guards, or the user picks which answer they get by guessing where a hyphen goes.
+      // **Both sides are folded to the spoken form, and that is the whole point.** Lane (1)
+      // has just declared `ca-fe` and `cafe` to be one and the same identifier — that is what
+      // matching on the spoken form *means*. A gate must be at least as broad as the lane it
+      // guards, or the user chooses between "warned" and "silently landed on another project"
+      // by guessing where a hyphen goes.
       //
-      // Asking the hyphen-stripped form as well can only ever produce **more** ambiguity
-      // errors, never resolve to a different project — it widens "stop and ask", nothing
-      // else. And it stays quiet in practice: a custom ID with any non-hex character has a
-      // slug key that cannot prefix any UUID, so this second test only fires for exactly the
-      // hex-shaped strings that create the hazard.
+      // Folding only one side is not enough, and gets it wrong in both directions:
+      //   - comparing the literal input against the literal id misses `ca-fe` when the id
+      //     starts `cafe`;
+      //   - comparing the *stripped* input against the literal id misses `dddd44444444` when
+      //     the id is `dddd4444-4444-…`, because the id's own hyphens are still in the way.
+      // The second miss is the worse one: the spoken channel is exactly where hyphens get
+      // dropped, so the unprotected spelling would be the one people actually type.
       //
-      // `wanted` is necessarily non-null whenever `wantedSlug` is (stripping only shortens);
-      // the `??` is for the type narrowing.
-      const literal = wanted ?? wantedSlug;
+      // Stripping both sides subsumes the literal test outright: removing hyphens is a
+      // homomorphism, so if the literal input prefixes an id, the stripped input prefixes the
+      // stripped id too. One comparison, no asymmetry left.
+      //
+      // This can only ever produce **more** ambiguity errors, never resolve to a different
+      // project — it widens "stop and ask", nothing else. And it stays quiet in practice: a
+      // stripped UUID is 32 pure hex characters, so a custom ID containing any non-hex
+      // character cannot prefix one. Only the hex-shaped strings that create the hazard in
+      // the first place ever reach this branch.
       const shadowed = all.filter(
-        (p) => p !== hit && (p.id.startsWith(literal) || p.id.startsWith(wantedSlug))
+        (p) => p !== hit && p.id.replace(/-/g, "").startsWith(wantedSlug)
       );
       if (shadowed.length > 0) {
         throw new Error(
