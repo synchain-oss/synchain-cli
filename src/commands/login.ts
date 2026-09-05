@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";
 import { promptPassword, promptText } from "../util/prompt.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { assertSafeBaseUrl } from "../util/url.js";
 
 export interface LoginFlags {
@@ -20,7 +21,15 @@ export interface MeResponse {
     displayName: string | null;
     avatarUrl: string | null;
   };
-  projects: Array<{ id: string; name: string; role: string }>;
+  // `customId` is the short custom ID claimed on the web (null when never set).
+  // **Declaring it optional is load-bearing**: the CLI is released independently with no
+  // auto-publish, so "new CLI against an older server" is a permanent condition, and such
+  // a server does not return the key at all. `apiFetch` is a bare `res.json() as T` with
+  // no runtime schema validation, so marking it required would just make the type lie —
+  // consumers have to handle `undefined` themselves. The converse holds too: an older CLI
+  // against a newer server quietly ignores the extra key, which makes the server side of
+  // this purely additive.
+  projects: Array<{ id: string; name: string; role: string; customId?: string | null }>;
 }
 
 /** A friendly label for the signed-in user (display name → username → email → id). */
@@ -78,8 +87,10 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
       activeProject: existing.baseUrl === baseUrl ? existing.activeProject : undefined,
     };
     await saveConfig(cfg);
-    const suffix = me.user.email ? ` (${me.user.email})` : "";
-    console.log(pc.green(`Logged in as ${userLabel(me.user)}${suffix}.`));
+    // Same output-boundary rule as `whoami`: these are the user's own profile fields, but an
+    // unsanitized exception next to a sanitized neighbour is how the rule erodes.
+    const suffix = me.user.email ? ` (${sanitizeInline(me.user.email)})` : "";
+    console.log(pc.green(`Logged in as ${sanitizeInline(userLabel(me.user))}${suffix}.`));
     if (me.projects.length > 0) {
       console.log(
         pc.dim(

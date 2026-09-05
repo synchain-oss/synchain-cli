@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
+import { sanitizeBlock } from "./util/sanitize.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 
 /** Typed error thrown by apiFetch on non-2xx responses. */
@@ -131,11 +132,51 @@ export function resolveActiveProject(
   throw new Error("No project selected. Pass --project <id> or run `synchain project use <id>`.");
 }
 
-/** Pretty-prints an ApiError (or any error) for console output. */
+/** Cap on the error body that reaches the terminal, measured after indenting. */
+const MAX_ERROR_BODY = 2000;
+
+/**
+ * Pretty-prints an ApiError (or any error) for console output.
+ *
+ * The body is ANSI-sanitized, and this is the **most reachable** sanitizing point in the CLI,
+ * not the least: every command funnels its failure path through here, and unlike the success
+ * paths it does not require getting past authentication first. `readJsonOrText` falls back to
+ * `res.text()` whenever the content-type is not JSON, so a `text/plain` 4xx from a compromised
+ * deployment — or from whatever server a user was talked into pointing `--base-url` at — would
+ * otherwise land in the terminal verbatim. (The JSON branch was already safe: `JSON.stringify`
+ * escapes control characters. `err.url` needs no sanitizing for the cross-tenant case either:
+ * every id interpolated into a path goes through `encodeURIComponent`, which turns an ESC into
+ * `%1B`. It is not escape-proof in general — `joinUrl` concatenates the raw `--base-url` string,
+ * and `assertSafeBaseUrl` parses it without writing the parsed form back — but that content
+ * comes from the user's own argv, so it is self-inflicted rather than attacker-supplied.)
+ *
+ * `sanitizeBlock`, not `sanitizeInline`: an error body is legitimately multi-line, and folding
+ * its newlines into spaces would mangle a stack trace or a wrapped message. Blocks keep newlines
+ * and tabs, drop CR, and strip every escape sequence — exactly what an error body needs.
+ *
+ * Keeping newlines then makes **line structure** its own question: every continuation line is
+ * indented to match the first, so a body cannot emit a line that reads as the CLI's own output.
+ * Colour is not a defence here — under `NO_COLOR` or a non-TTY, picocolors emits nothing, and
+ * a non-TTY is exactly where an agent is parsing stderr.
+ *
+ * And the body is capped, with the cut marked. An error body is diagnostic, not a payload; an
+ * unbounded one buries whatever the user actually needed to read. The marker matters as much as
+ * the cap: a truncated JSON body is syntactically broken, and unlabelled it reads as the server
+ * having returned malformed data.
+ */
 export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
+    const raw = typeof err.body === "string" ? err.body : err.body ? JSON.stringify(err.body) : "";
+    // Order: sanitize → indent → truncate. The cap has to measure what actually reaches the
+    // terminal, and indenting adds two characters per line — capping first, a body of 2000
+    // newlines would still print ~6000 characters across 1000 lines, and newlines are the
+    // cheapest way to push what the user needed to read off the screen. Truncating last is safe
+    // because sanitizing has already removed every escape, so a cut cannot leave a bare ESC.
+    const indented = sanitizeBlock(raw).replace(/\n/g, "\n  ");
     const bodyStr =
-      typeof err.body === "string" ? err.body : err.body ? JSON.stringify(err.body) : "";
+      indented.length > MAX_ERROR_BODY
+        ? `${indented.slice(0, MAX_ERROR_BODY)}\n  … [truncated]`
+        : indented;
     return `API error ${err.status} ${err.url}${bodyStr ? `\n  ${bodyStr}` : ""}`;
   }
   if (err instanceof Error) return err.message;
