@@ -1,6 +1,6 @@
 {
   "name": "@synchain/cli",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "CLI for the Synchain platform — manage project files, calendar, discussion, and members from your terminal.",
   "keywords": [
     "synchain",

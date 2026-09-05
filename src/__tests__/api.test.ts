@@ -244,6 +244,45 @@ describe("formatApiError", () => {
     );
   });
 
+  it("strips ANSI escapes from a text/plain error body", () => {
+    // `readJsonOrText` falls back to `res.text()` whenever the content-type is not JSON, so
+    // this branch carries raw server text — and it is the *failure* path, reachable without
+    // ever getting past authentication (a `--base-url` pointed at a hostile server is enough).
+    const body = "\u001b[2K\rforbidden\u001b]0;pwned\u0007";
+    const out = formatApiError(new ApiError(403, "https://x", body));
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("forbidden");
+  });
+
+  it("keeps newlines in a multi-line body but indents every continuation line", () => {
+    // sanitizeBlock, not sanitizeInline: an error body is legitimately multi-line, and folding
+    // its newlines into spaces would mangle a stack trace. Keeping them makes line structure
+    // its own question — an unindented second line is indistinguishable from the CLI's own
+    // output, and colour is no defence under NO_COLOR or a non-TTY, which is exactly where an
+    // agent parses stderr.
+    expect(formatApiError(new ApiError(500, "https://x", "line one\nline two"))).toBe(
+      "API error 500 https://x\n  line one\n  line two"
+    );
+  });
+
+  it("caps a runaway error body and marks the cut", () => {
+    // Diagnostic, not a payload: an unbounded body buries whatever the user needed to read.
+    // The marker matters too — a truncated JSON body is syntactically broken, and unlabelled
+    // it reads as the server having returned malformed data.
+    const out = formatApiError(new ApiError(500, "https://x", "a".repeat(5000)));
+    expect(out.length).toBeLessThan(2200);
+    expect(out).toContain("aaaa");
+    expect(out).toContain("[truncated]");
+  });
+
+  it("caps on what is actually printed, counting the indent it adds", () => {
+    // The cap runs after indenting, not before. Capping first, a body of 2000 newlines would
+    // still print ~6000 characters over 1000 lines — and newlines are the cheapest way to push
+    // what the user needed to read off the screen, which is the very thing the cap exists for.
+    const out = formatApiError(new ApiError(500, "https://x", "\n".repeat(2000)));
+    expect(out.length).toBeLessThan(2200);
+  });
+
   it("returns the message for a generic Error", () => {
     expect(formatApiError(new Error("boom"))).toBe("boom");
   });
