@@ -203,8 +203,6 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
   input: string,
   fetchAll: () => Promise<T[]>
 ): Promise<T> {
-  const all = await fetchAll();
-
   // Trim **once**, up front, so both lanes are equally forgiving of paste artifacts. Before
   // this, `" my-band "` resolved (refKey trims as part of building its comparison key) while
   // `" <uuid> "` did not (the UUID lane compares raw bytes) — an asymmetry with no
@@ -219,8 +217,13 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
     // Guarded explicitly rather than left to fall through: an empty string is a prefix of
     // every id, so the UUID lane would answer `prefix "" is ambiguous (matches N)`, which
     // tells the user nothing about what they actually did wrong.
-    throw new Error(`No project matches "${sanitizeInline(input)}".`);
+    // Placed **before** `fetchAll()`: nothing a project list could contain changes this
+    // answer, so paying a round-trip for it is pure waste. The message quotes `raw`, the
+    // same string the two ambiguity errors below quote.
+    throw new Error(`No project matches "${sanitizeInline(raw)}".`);
   }
+
+  const all = await fetchAll();
 
   // (1) Custom-ID match — its own candidate pool, with no UUID mixed in. Compared on the
   // **spoken form** (hyphens stripped, the same key the server uses), not byte-for-byte:

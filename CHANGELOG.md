@@ -38,6 +38,10 @@ Adds custom project IDs to `project use` / `project ls`.
 - `project use` asserts that what it persists is a canonical UUID. A custom ID is mutable
   and never belongs in an API path; storing one would leave a later command firing at a
   string that no longer points at this project.
+- Server-derived strings printed by `project use` and `whoami` are now ANSI-sanitized. The
+  `ref` column of `project ls` always was (via `renderTable`), but `project use` had no such
+  funnel, and the project name it writes into `config.json` was replayed unsanitized by every
+  later `whoami` — offline, with no request involved.
 
 ## [0.6.0] - 2026-08-14
 
