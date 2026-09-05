@@ -94,9 +94,6 @@ export async function runProjectUse(input: string): Promise<void> {
     // invariant's last gate on the CLI side -- if anyone ever writes `input` here it fails
     // on the spot, instead of leaving every later command to hit one of those two outcomes.
     if (!isUuid(resolved.id)) {
-      // Sanitized even though it is "just an id": this branch fires precisely when the
-      // string is **not** a UUID, i.e. at the one moment we have the least reason to assume
-      // it is clean.
       // Sanitized *and* truncated: this branch fires precisely when the string is **not** a
       // UUID, i.e. at the one moment we have the least reason to assume anything about it --
       // including its length.

@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";
 import { promptPassword, promptText } from "../util/prompt.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { assertSafeBaseUrl } from "../util/url.js";
 
 export interface LoginFlags {
@@ -86,8 +87,10 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
       activeProject: existing.baseUrl === baseUrl ? existing.activeProject : undefined,
     };
     await saveConfig(cfg);
-    const suffix = me.user.email ? ` (${me.user.email})` : "";
-    console.log(pc.green(`Logged in as ${userLabel(me.user)}${suffix}.`));
+    // Same output-boundary rule as `whoami`: these are the user's own profile fields, but an
+    // unsanitized exception next to a sanitized neighbour is how the rule erodes.
+    const suffix = me.user.email ? ` (${sanitizeInline(me.user.email)})` : "";
+    console.log(pc.green(`Logged in as ${sanitizeInline(userLabel(me.user))}${suffix}.`));
     if (me.projects.length > 0) {
       console.log(
         pc.dim(
