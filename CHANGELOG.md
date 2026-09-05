@@ -44,7 +44,9 @@ Adds custom project IDs to `project use` / `project ls`.
   answers and a user picks between "warned" and "silently landed on another project" by
   guessing where a hyphen goes. Folding one side is not enough: the hyphens may be the id's
   rather than the input's, and that half is the more dangerous one, since the spoken channel
-  is exactly where hyphens get dropped.
+  is exactly where hyphens get dropped. Case is folded on both sides for the same reason:
+  `project ls` prints an id verbatim, so an upper-case one would produce a `ref` the lane
+  folds and the gate does not.
 - Server-derived strings printed by `project use` and `whoami` are now ANSI-sanitized. The
   `ref` column of `project ls` always was (via `renderTable`), but `project use` had no such
   funnel, and the project name it writes into `config.json` was replayed unsanitized by every

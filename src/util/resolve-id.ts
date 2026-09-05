@@ -280,9 +280,14 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       // stripped UUID is 32 pure hex characters, so a custom ID containing any non-hex
       // character cannot prefix one. Only the hex-shaped strings that create the hazard in
       // the first place ever reach this branch.
-      const shadowed = all.filter(
-        (p) => p !== hit && p.id.replace(/-/g, "").startsWith(wantedSlug)
-      );
+      // Folded with `slugKeyOf` on both sides rather than a hand-written `replace(/-/g, "")`:
+      // that shortcut folds hyphens but not case, and one dimension folded on the left while
+      // four are folded on the right is the same asymmetry one level down. `projectRefLabel`
+      // prints an id verbatim, so an upper-case id would print a `ref` that lane (1) folds and
+      // matches while the gate does not -- the "one table, two rows, same identifier" case,
+      // walked straight past. (The UUID lane not folding case is harmless by comparison: there
+      // a failure to fold yields `No project matches`, whereas here it yields a *result*.)
+      const shadowed = all.filter((p) => p !== hit && (slugKeyOf(p.id) ?? "").startsWith(wantedSlug));
       if (shadowed.length > 0) {
         throw new Error(
           `"${sanitizeInline(raw)}" is ambiguous: it is the custom ID of project ${sanitizeInline(
