@@ -275,6 +275,17 @@ describe("formatApiError", () => {
     expect(out).toContain("[truncated]");
   });
 
+  it("caps line count, not just characters", () => {
+    // The two caps defend different things and are not interchangeable. 2000 characters of
+    // newlines is still ~666 lines — more than enough to scroll the `API error <status> <url>`
+    // line, printed *first*, out of the reader's scroll-back, which is the very outcome the cap
+    // exists to prevent. Characters bound how much stderr is flooded; lines bound how much of
+    // what came before survives.
+    const out = formatApiError(new ApiError(500, "https://x", "line\n".repeat(500)));
+    expect(out.split("\n").length).toBeLessThan(25);
+    expect(out).toContain("[truncated]");
+  });
+
   it("caps on what is actually printed, counting the indent it adds", () => {
     // The cap runs after indenting, not before. Capping first, a body of 2000 newlines would
     // still print ~6000 characters over 1000 lines — and newlines are the cheapest way to push

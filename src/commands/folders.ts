@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
 import { resolveByPrefix } from "../util/resolve-id.js";
 
@@ -48,13 +49,45 @@ async function fetchAllFolders(projectId: string): Promise<Folder[]> {
   return res.folders;
 }
 
+/**
+ * A folder id trimmed for display: **sanitized first, then sliced**.
+ *
+ * Slicing first could cut through an escape sequence and leave a bare ESC in the output, so the
+ * order is load-bearing. Ids are server-supplied like every other field here.
+ */
+export function shortFolderId(id: string): string {
+  return sanitizeInline(id).slice(0, 8);
+}
+
+/**
+ * `<name> (<8-char id>)` -- the tail every folders success line shares.
+ *
+ * Extracted, like `renderMembersTable`, so the sanitizing has a regression net: `src/commands`
+ * is outside the coverage `include` and `commander.test.ts` mocks this module wholesale, so a
+ * string built inline here could lose its `sanitizeInline` with every test still green.
+ */
+export function folderLabel(f: { id: string; name: string }): string {
+  return `${sanitizeInline(f.name)} (${shortFolderId(f.id)})`;
+}
+
 /** Resolve a folder id (full UUID or prefix) to its record. */
 async function resolveFolder(projectId: string, input: string): Promise<Folder> {
   return resolveByPrefix(input, () => fetchAllFolders(projectId), "folder");
 }
 
-/** Render folders as a tree; orphans (unknown parent) render at root. */
-function renderTree(folders: Folder[]): string {
+/**
+ * Render folders as a tree; orphans (unknown parent) render at root.
+ *
+ * ⚠ This is the one listing in the CLI that builds its own lines instead of going through
+ * `renderTable`, so it does **not** inherit `toCell`'s sanitizing -- and folder names are
+ * content any member of the project can set. That makes this the most reachable terminal-escape
+ * injection point in the whole tool: no hostile server, no compromised deployment, no `--base-url`
+ * needed. One member renames a folder; the next person to run `synchain folders ls` wears it.
+ * (`files ls` in the same file is safe precisely because it goes through `renderTable`.)
+ *
+ * Exported so the sanitizing is testable at all -- see `folderLabel` for why that matters.
+ */
+export function renderTree(folders: Folder[]): string {
   const byParent = new Map<string | null, Folder[]>();
   const ids = new Set(folders.map((f) => f.id));
   for (const f of folders) {
@@ -71,7 +104,9 @@ function renderTree(folders: Folder[]): string {
     children.forEach((child, idx) => {
       const isLast = idx === children.length - 1;
       const connector = isLast ? "└── " : "├── ";
-      lines.push(`${prefix}${connector}${child.name}  ${pc.dim(child.id.slice(0, 8))}`);
+      lines.push(
+        `${prefix}${connector}${sanitizeInline(child.name)}  ${pc.dim(shortFolderId(child.id))}`
+      );
       walk(child.id, `${prefix}${isLast ? "    " : "│   "}`);
     });
   }
@@ -158,7 +193,7 @@ export async function runFoldersMkdir(name: string, flags: FoldersFlags): Promis
       console.log(JSON.stringify(created, null, 2));
     } else {
       console.log(
-        pc.green(`Created folder ${created.folder.name} (${created.folder.id.slice(0, 8)})`)
+        pc.green(`Created folder ${folderLabel(created.folder)}`)
       );
     }
   } catch (err) {
@@ -182,7 +217,7 @@ export async function runFoldersRm(folderId: string, flags: FoldersFlags): Promi
       `/api/projects/${encodeURIComponent(projectId)}/folders/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted folder ${resolved.name} (${resolved.id.slice(0, 8)}).`));
+    console.log(pc.green(`Deleted folder ${folderLabel(resolved)}.`));
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       const body = err.body as { error?: string } | null;
@@ -238,7 +273,9 @@ export async function runFoldersRename(
       return;
     }
     console.log(
-      pc.green(`Renamed folder → ${result.folder.name} (id: ${resolved.id.slice(0, 8)}).`)
+      pc.green(
+        `Renamed folder → ${sanitizeInline(result.folder.name)} (id: ${shortFolderId(resolved.id)}).`
+      )
     );
   } catch (err) {
     if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
@@ -247,7 +284,9 @@ export async function runFoldersRename(
       return;
     }
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`Folder ${folderId} not found.`));
+      // argv-sourced, so self-inflicted rather than cross-tenant -- sanitized anyway, because an
+      // unsanitized exception sitting among sanitized neighbours is how the rule erodes.
+      console.error(pc.red(`Folder ${sanitizeInline(folderId)} not found.`));
       process.exitCode = 1;
       return;
     }
