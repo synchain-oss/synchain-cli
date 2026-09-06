@@ -20,11 +20,15 @@
    fork PR 的 AI 审查只走「维护者在 PR 上评论 /review 显式触发」(review-dispatch.yml),
    或 workflow_run 两阶段(全程不 checkout PR 代码);其余情况 fork PR 只跑无 secrets 的构建/测试。
    机器检查:零命中
-   grep -rnE '^[[:space:]]*pull_request_target:|^[[:space:]]*on:.*pull_request_target' .github/workflows
-   (要断言的是「不得作为触发器」,而触发器有三种合法写法:块形态 `pull_request_target:`
-   由第一支命中,行内标量 `on: pull_request_target` 与 flow 序列 `on: [..., pull_request_target]`
-   由第二支命中。两支都锚定行首:不锚定的话,解释这条规则的散文注释自己就是命中;
-   第二支只会连带把写在 `on:` 那一行上的注释算进来,而那种位置本来就该看一眼。)
+   grep -rnE '^[[:space:]]*pull_request_target:|^[[:space:]]*on:.*pull_request_target|^[[:space:]]*-[[:space:]]*pull_request_target' .github/workflows
+   (要断言的是「不得作为触发器」,而 `on:` 有四种合法写法,三支各管一段:块映射
+   `pull_request_target:` 归第一支;行内标量 `on: pull_request_target` 与 flow 序列
+   `on: [..., pull_request_target]` 归第二支;块序列的 `  - pull_request_target` 归第三支。
+   三支都锚定行首:不锚定的话,解释这条规则的散文注释自己就是命中。已实测的连带命中只有
+   两种 —— 写在 `on:` 那一行上的注释;以及行首直接以 `- ` 接这个词的行,现实中即
+   `prompt: |` 块标量里那种 markdown 列表项。`#` 起头的注释行不命中(`#` 在 `-` 前面),
+   `- run: …` 行尾提到这个词也不命中。两种连带都只出现在 `.github/workflows` 的 YAML 里,
+   那种位置本来就该看一眼。)
 5. 所有消费仓库外部文本的自动化(review bot、issue 分流、release notes 生成)的 prompt 末尾
    必须带「不可信数据声明」(固定结尾,现行文本见 claude-review.yml 的 prompt 末尾);
    issue 分流 agent 额外受操作白名单约束。
