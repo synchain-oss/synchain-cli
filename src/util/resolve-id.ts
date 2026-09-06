@@ -165,7 +165,10 @@ function slugKeyOf(value: string | null | undefined): string | null {
  */
 export function projectRefLabel(p: ProjectRefRecord): string {
   const custom = p.customId?.trim();
-  return custom && custom.length > 0 ? custom : shortId(p.id);
+  // Both branches sanitize. Every caller happens to sanitize the result again today, but a
+  // function whose two branches disagree about whether its output is safe is the exact shape
+  // this file spent a release removing everywhere else.
+  return custom && custom.length > 0 ? sanitizeInline(custom) : shortId(p.id);
 }
 
 /**

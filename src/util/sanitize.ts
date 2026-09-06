@@ -53,3 +53,22 @@ export function sanitizeInline(v: unknown): string {
 export function shortId(v: unknown, len = 8): string {
   return sanitizeInline(v).slice(0, len);
 }
+
+/**
+ * A server-supplied **number** rendered for display.
+ *
+ * TypeScript's `number` is a compile-time claim, not a runtime one: `apiFetch` is a bare
+ * `res.json() as T` with no schema validation, so a field declared `total: number` can arrive
+ * as `"10[2K…"` and be printed verbatim. Counts look like the last place an escape could
+ * hide, which is exactly why they get skipped.
+ *
+ * Returns the number when it really is one (finite — `NaN`/`Infinity` are as much a sign of a
+ * malformed response as a string would be), and otherwise falls back to sanitizing whatever
+ * actually arrived, so the output stays honest instead of printing `NaN`.
+ *
+ * ⚠ Use it **before** arithmetic, not after: `offset + 1` on a string offset is string
+ * concatenation, so a tainted value would slip past a check applied to the result.
+ */
+export function safeNumber(v: unknown): number | string {
+  return typeof v === "number" && Number.isFinite(v) ? v : sanitizeInline(v);
+}

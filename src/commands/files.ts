@@ -10,7 +10,7 @@ import {
   apiFetch,
   ApiError,
   formatApiError,
-  formatErrorBody,
+  withErrorBody,
   resolveActiveProject,
   wantsJson,
 } from "../api.js";
@@ -228,7 +228,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     const absPath = path.resolve(localPath);
     const stat = await fs.stat(absPath);
     if (!stat.isFile()) {
-      console.error(pc.red(`Not a regular file: ${absPath}`));
+      console.error(pc.red(`Not a regular file: ${sanitizeInline(absPath)}`));
       process.exitCode = 1;
       return;
     }
@@ -236,7 +236,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     // pre-check here so an empty placeholder file gets a message that says why.
     if (stat.size === 0) {
       console.error(
-        pc.red(`Cannot upload an empty (0-byte) file: ${absPath} — empty files aren't supported.`)
+        pc.red(`Cannot upload an empty (0-byte) file: ${sanitizeInline(absPath)} — empty files aren't supported.`)
       );
       process.exitCode = 1;
       return;
@@ -285,15 +285,11 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       // does not come from the configured API host at all, but from whatever host that API
       // handed back in `upload.uploadUrl`. It bypasses `formatApiError`, so it needs the shared
       // renderer explicitly -- sanitized, indented, and capped.
-      const body = formatErrorBody(text);
-      console.error(
-        pc.red(`Storage PUT failed: ${putRes.status}${body ? `
-  ${body}` : ""}`)
-      );
+      console.error(pc.red(withErrorBody(`Storage PUT failed: ${putRes.status}`, text)));
       process.exitCode = 1;
       return;
     }
-    progress.finish(`uploaded ${fileName} (${formatBytes(stat.size)})`);
+    progress.finish(`uploaded ${sanitizeInline(fileName)} (${formatBytes(stat.size)})`);
 
     // 3. Register the object as a file row. Note the field rename key → storageKey.
     let created: CreateFileResponse;

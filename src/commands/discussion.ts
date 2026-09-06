@@ -4,7 +4,7 @@ import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } f
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline, sanitizeBlock, shortId } from "../util/sanitize.js";
+import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
 
 // Discussion categories (see lib/discussion/types.ts).
 const CATEGORIES = ["mix", "master", "art", "release", "vocal", "general"] as const;
@@ -173,6 +173,16 @@ export function paginationFooter(
   total: number,
   limit: number
 ): string | null {
+  // These are declared `number`, but that is a compile-time claim: `apiFetch` is a bare
+  // `res.json() as T`, so `total` can arrive as a string carrying an escape sequence. Validate
+  // **before** the arithmetic -- `offset + 1` on a string is concatenation, so a check applied
+  // to the result would already be too late.
+  const ok = [offset, count, total, limit].every((n) => typeof n === "number" && Number.isFinite(n));
+  if (!ok) {
+    // Nothing meaningful to compute from a malformed page; show what arrived, sanitized,
+    // rather than printing arithmetic performed on it.
+    return `Showing ${safeNumber(count)} of ${safeNumber(total)} threads (pagination unavailable: malformed response)`;
+  }
   const hasNext = offset + count < total;
   if (offset === 0 && !hasNext) return null;
   let line = `Showing ${offset + 1}–${offset + count} of ${total} threads`;
@@ -195,7 +205,7 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
       if (res.offset > 0 && res.total > 0) {
         console.log(
           pc.dim(
-            `(no threads at offset ${res.offset} — ${res.total} total; use a smaller --offset)`
+            `(no threads at offset ${safeNumber(res.offset)} — ${safeNumber(res.total)} total; use a smaller --offset)`
           )
         );
       } else {

@@ -3,7 +3,7 @@ import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline, shortId } from "../util/sanitize.js";
+import { sanitizeInline, shortId, safeNumber } from "../util/sanitize.js";
 
 /** A notification view-model as served by GET /api/user/notifications. */
 export interface NotificationItem {
@@ -80,7 +80,7 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     } else {
       for (const n of res.items) console.log(formatNotificationLine(n));
     }
-    console.log(pc.dim(`${res.unreadCount} unread`));
+    console.log(pc.dim(`${safeNumber(res.unreadCount)} unread`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
     process.exitCode = 1;
@@ -111,7 +111,9 @@ export async function runNotificationsRead(
         console.log(JSON.stringify(res, null, 2));
       } else {
         console.log(
-          pc.green(`Marked ${res.updated} notification${res.updated === 1 ? "" : "s"} read.`)
+          pc.green(
+            `Marked ${safeNumber(res.updated)} notification${res.updated === 1 ? "" : "s"} read.`
+          )
         );
       }
       return;

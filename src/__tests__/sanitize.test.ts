@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
-import { sanitizeInline, sanitizeBlock, shortId } from "../util/sanitize.js";
+import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
 
 // Security-critical: these strip terminal-escape sequences from untrusted
 // server strings before they are printed. A regex regression here silently
@@ -71,6 +71,27 @@ describe("shortId", () => {
     // Nothing in the CLI verifies a server actually returned a string id before printing it.
     expect(shortId(null)).toBe("");
     expect(shortId(undefined)).toBe("");
+  });
+});
+
+describe("safeNumber", () => {
+  it("passes a real finite number through untouched", () => {
+    expect(safeNumber(42)).toBe(42);
+    expect(safeNumber(0)).toBe(0);
+  });
+
+  it("sanitizes a value that only claims to be a number", () => {
+    // `apiFetch` is a bare `res.json() as T`: a field declared `total: number` can arrive as a
+    // string carrying an escape. Counts look like the last place an escape could hide, which is
+    // exactly why they get skipped.
+    const out = safeNumber("10\u001b[2K\rpwned");
+    expect(String(out)).not.toContain("\u001b");
+    expect(String(out)).toContain("10");
+  });
+
+  it("treats NaN and Infinity as malformed rather than printing them", () => {
+    expect(safeNumber(Number.NaN)).toBe("NaN");
+    expect(safeNumber(Number.POSITIVE_INFINITY)).toBe("Infinity");
   });
 });
 

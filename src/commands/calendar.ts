@@ -360,7 +360,7 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
     // event surfaces as the endpoint's 404 rather than resolveByPrefix's "No event
     // matches". Map it to the same friendly message the prefix path prints.
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`No event matches "${eventId}".`));
+      console.error(pc.red(`No event matches "${sanitizeInline(eventId)}".`));
       process.exitCode = 1;
       return;
     }

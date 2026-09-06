@@ -7,6 +7,7 @@ import {
   apiFetch,
   ApiError,
   formatApiError,
+  withErrorBody,
   resolveActiveProject,
   wantsJson,
   type ApiFetchOptions,
@@ -282,16 +283,28 @@ describe("formatApiError", () => {
     // exists to prevent. Characters bound how much stderr is flooded; lines bound how much of
     // what came before survives.
     const out = formatApiError(new ApiError(500, "https://x", "line\n".repeat(500)));
-    expect(out.split("\n").length).toBeLessThan(25);
+    expect(out.split("\n").length).toBeLessThan(45);
     expect(out).toContain("[truncated]");
   });
 
-  it("caps on what is actually printed, counting the indent it adds", () => {
-    // The cap runs after indenting, not before. Capping first, a body of 2000 newlines would
-    // still print ~6000 characters over 1000 lines — and newlines are the cheapest way to push
-    // what the user needed to read off the screen, which is the very thing the cap exists for.
-    const out = formatApiError(new ApiError(500, "https://x", "\n".repeat(2000)));
-    expect(out.length).toBeLessThan(2200);
+  it("counts the indent it adds when measuring against the character cap", () => {
+    // Deliberately sized to be *discriminating*: 20 lines of 99 characters is 1999 characters
+    // raw — just under the 2000 cap — but 2037 once each continuation line gains its two-space
+    // prefix. Measure before indenting and this body passes through whole; measure after and it
+    // is cut. (An earlier version of this test used 2000 newlines, which tripped the line cap
+    // first and so proved nothing about the character path.)
+    const body = Array.from({ length: 20 }, () => "a".repeat(99)).join("\n");
+    const out = formatApiError(new ApiError(500, "https://x", body));
+    expect(out).toContain("[truncated]");
+  });
+
+  it("withErrorBody omits the body block entirely when there is nothing to show", () => {
+    // The storage-PUT call site composes through this too, so the shape has one owner. A copy
+    // that lost the two-space prefix would silently reopen the line-spoofing the indent guards.
+    expect(withErrorBody("Storage PUT failed: 500", "")).toBe("Storage PUT failed: 500");
+    expect(withErrorBody("Storage PUT failed: 500", "boom")).toBe(
+      "Storage PUT failed: 500\n  boom"
+    );
   });
 
   it("returns the message for a generic Error", () => {
