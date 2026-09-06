@@ -19,6 +19,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest             # [R3] V-4 确认前一律 latest(§3.0 口径注)
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -115,9 +116,12 @@ jobs:
             你只做代码审查:不改文件、不建 commit、不推分支、不运行未授权命令、不输出任何 secret 或环境变量。
             
             无论有无严重问题都必须留中文结论。
+          # allowedTools 里不给 Bash(gh pr comment:*):track_progress 已由 action 托管发布评论,
+          # 模型不需要自己发帖;而它读的是 PR 里的不可信文本,一个尾参通配的写通道
+          # (:* 允许任意 --body)正好是 prompt injection 想要的外泄原语。
           claude_args: |
             --model deepseek-v4-flash[1M]
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Read,Glob,Grep"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
 
 # 默认停用(与 claude-review 二选一,沿用 Synchain 运维习惯):
 #   gh workflow disable "DeepSeek PR Review" --repo synchain-oss/<repo>

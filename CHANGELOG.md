@@ -4,7 +4,7 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## Unreleased
 
 ### Changed
 - **The default host is now `https://www.synchain.ca`**, the platform's own origin, rather than
@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `docs/contract-changes/20260906-default-base-url.md`.
 - The two help strings that spelled the default host out now read the constant instead. That
   duplication is why the value was wrong in three places at once.
+- `synchain help project` now describes what `project use` has accepted since 0.7.0: a custom ID
+  or `synchain-<uuid>`, not only a UUID or its 8-character prefix, and the `ref` column is what
+  `project ls` prints. `docs/reference.md` and `docs/install-for-agents.md` were updated with the
+  feature; this help text was the surface that got missed.
 
 ### Security
 - **`folders ls` no longer lets a folder name drive your terminal.** `renderTree` built its own
@@ -47,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   warning, and the logout confirmation prompt -- the one server string fed to a prompt rather than
   to `console.*`, which is why a `grep console` sweep never saw it.
 
-## [0.7.0] - 2026-09-05
+## 0.7.0 - 2026-09-05
 
 Adds custom project IDs to `project use` / `project ls`.
 
@@ -100,7 +104,7 @@ Adds custom project IDs to `project use` / `project ls`.
   funnel, and the project name it writes into `config.json` was replayed unsanitized by every
   later `whoami` — offline, with no request involved.
 
-## [0.6.0] - 2026-08-14
+## 0.6.0 - 2026-08-14
 
 Second public release. Skips 0.5.x (those versions belong to the old monorepo
 numbering on npm; 0.6.0 starts the independent-repository era cleanly).
@@ -123,7 +127,7 @@ numbering on npm; 0.6.0 starts the independent-repository era cleanly).
   400/401 API error, because `process.exit(1)` raced the closing HTTP
   connection. Every error path now exits cleanly with code 1.
 
-## [0.4.0] - 2026-08-13
+## 0.4.0 - 2026-08-13
 
 First public release on npm. The CLI now lives in its own repository.
 

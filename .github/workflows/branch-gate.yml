@@ -23,6 +23,7 @@ jobs:
   branch-gate:
     name: branch-gate                   # required check context,永不改名,永不加 if:
     runs-on: ubuntu-latest              # [R3] V-4 确认前一律 latest(§3.0 口径注);三仓 branch-gate 逐字取本节
+    timeout-minutes: 5
     steps:
       - name: Check source branch
         env:
