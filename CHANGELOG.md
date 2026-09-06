@@ -4,6 +4,19 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **The default host is now `https://www.synchain.ca`**, the platform's own origin, rather than
+  the Vercel deployment domain that used to sit there. Both serve the same production app, which
+  is why nothing was ever broken -- and why it went unnoticed: a deployment hostname is an
+  implementation detail that can be retired without warning, and it was the value the CLI taught
+  every unconfigured login to trust. **Existing installs are unaffected**: the `baseUrl` in your
+  `config.json` still wins, and `--base-url` still overrides. Contract record:
+  `docs/contract-changes/20260906-default-base-url.md`.
+- The two help strings that spelled the default host out now read the constant instead. That
+  duplication is why the value was wrong in three places at once.
+
 ## [0.7.0] - 2026-09-05
 
 Adds custom project IDs to `project use` / `project ls`.

@@ -49,7 +49,7 @@ update after pulling changes, re-run `npm run build`.
    synchain login
    ```
 
-   You are prompted for the **base URL** (default `https://synchain.vercel.app`) and the
+   You are prompted for the **base URL** (default `https://www.synchain.ca`) and the
    **CLI key** (hidden input). The key is verified against `GET /api/user/me` and, on
    success, stored locally.
 

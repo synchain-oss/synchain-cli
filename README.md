@@ -52,7 +52,7 @@ Run `synchain help` or `synchain <group> --help` for options. Read commands acce
 ## Requirements & scope of this repo
 
 **This repository is the CLI client only.** The Synchain platform (the server) is a
-closed-source service hosted at `https://synchain.vercel.app`. You need a Synchain
+closed-source service hosted at `https://www.synchain.ca`. You need a Synchain
 account and a CLI key generated under **Settings → CLI Access** to use this tool — you
 cannot self-host the server from this repo.
 
@@ -109,7 +109,7 @@ synchain login && synchain project use <id> && synchain files upload ./mix.wav
 
 ## 需求与本仓库范围
 
-本仓库只是 CLI 客户端;服务端是 `https://synchain.vercel.app` 上的闭源平台(需账号 + **Settings → CLI Access** 生成的 key,无法用本仓库自建)。key 存于 `%APPDATA%\synchain` / `~/.config/synchain`(mode `0600`),绝不走 argv;CLI key 发布的帖标记 `is_ai_generated=true` 并显示 `[AI]` 徽章。
+本仓库只是 CLI 客户端;服务端是 `https://www.synchain.ca` 上的闭源平台(需账号 + **Settings → CLI Access** 生成的 key,无法用本仓库自建)。key 存于 `%APPDATA%\synchain` / `~/.config/synchain`(mode `0600`),绝不走 argv;CLI key 发布的帖标记 `is_ai_generated=true` 并显示 `[AI]` 徽章。
 
 ## 许可证
 

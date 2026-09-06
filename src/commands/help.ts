@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
+import { DEFAULT_BASE_URL } from "../config.js";
 import { CALENDAR_HELP } from "./calendar.js";
 import { DISCUSSION_HELP } from "./discussion.js";
 import { MEMBERS_HELP } from "./members.js";
@@ -21,7 +22,7 @@ const TOPICS: Record<string, Topic> = {
       "  synchain login --base-url <url>",
       "  SYNCHAIN_TOKEN=synch_live_sk_... synchain login --base-url <url>   # CI",
       "",
-      "Interactive prompts: base URL (default https://synchain.vercel.app) and CLI key.",
+      `Interactive prompts: base URL (default ${DEFAULT_BASE_URL}) and CLI key.`,
       "The CLI verifies the key via GET /api/user/me and stores it in the OS config",
       "dir (chmod 0600 on POSIX).",
       "",
