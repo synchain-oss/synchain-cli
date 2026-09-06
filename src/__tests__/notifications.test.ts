@@ -55,3 +55,14 @@ describe("formatNotificationLine", () => {
     expect(line).not.toContain(" · ");
   });
 });
+
+describe("relativeTime fallback", () => {
+  it("sanitizes the raw ISO string it falls back to", () => {
+    // Date.parse failing means the server's own string is what gets returned. This function is
+    // exported, so its safety must not depend on what its one current caller happens to do --
+    // same contract as `formatLocal` in calendar.ts.
+    const out = relativeTime("not-a-date\u001b[31m");
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("not-a-date");
+  });
+});

@@ -30,10 +30,18 @@ export interface NotificationsFlags {
   json?: boolean;
 }
 
-/** Compact "2h ago"-style relative time. Exported for tests. */
+/**
+ * Compact "2h ago"-style relative time. Exported for tests.
+ *
+ * The unparseable branch returns the server's raw string, so it sanitizes **inside the
+ * function** rather than leaning on the caller -- same contract as `formatLocal` in
+ * `calendar.ts`. A function that is exported and whose safety depends on what its one current
+ * caller happens to do is a trap for the second caller: they would have to re-derive this
+ * reasoning, or silently not.
+ */
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
+  if (Number.isNaN(t)) return sanitizeInline(iso);
   const s = Math.max(0, Math.floor((now - t) / 1000));
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);

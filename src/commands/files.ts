@@ -74,6 +74,30 @@ function extOf(name: string): string {
   return idx <= 0 ? "" : name.slice(idx + 1).toLowerCase();
 }
 
+/**
+ * The `files rename` extension-mismatch warning, or null when the extensions agree.
+ *
+ * `oldName` comes off the wire -- it is whatever a project member named the file -- and the
+ * extension is sliced straight out of it, so it needs sanitizing like every other server string.
+ * Two things made this the last unsanitized output on the "server string -> terminal" line:
+ * it writes through `process.stderr.write` rather than `console.*`, so a `grep console` sweep
+ * never sees it; and the local `CLIENT_NAME_FORBIDDEN_RE` looks like it already guards the name,
+ * while in fact it does not cover C1 (U+0080-U+009F) -- and U+009B *is* CSI to an xterm in 8-bit
+ * mode. A member names a file with one, anyone runs a rename that changes the extension, done.
+ *
+ * Extracted (not inlined) for the same reason as `folderLabel`: `src/commands` sits outside the
+ * coverage `include` and `commander.test.ts` mocks this module, so a sanitize call built inline
+ * here has no regression net at all.
+ */
+export function extensionWarning(oldName: string, newName: string): string | null {
+  const cur = extOf(oldName);
+  const nxt = extOf(newName);
+  if (cur === nxt) return null;
+  return cur
+    ? `Warning: extension differs (.${sanitizeInline(cur)} → ${nxt ? `.${sanitizeInline(nxt)}` : "(none)"}). Server may reject.`
+    : `Warning: original has no extension; new name does. Server may reject.`;
+}
+
 function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -597,14 +621,8 @@ export async function runFilesRename(
     }
 
     // Extension sanity check (warn only — the server's 422 is the source of truth).
-    if (extOf(resolved.name) !== extOf(newName)) {
-      const cur = extOf(resolved.name);
-      const nxt = extOf(newName);
-      const note = cur
-        ? `Warning: extension differs (.${cur} → ${nxt ? `.${nxt}` : "(none)"}). Server may reject.`
-        : `Warning: original has no extension; new name does. Server may reject.`;
-      process.stderr.write(pc.yellow(`${note}\n`));
-    }
+    const note = extensionWarning(resolved.name, newName);
+    if (note) process.stderr.write(pc.yellow(`${note}\n`));
 
     try {
       const result = await apiFetch<{ file: FileDTO }>(
