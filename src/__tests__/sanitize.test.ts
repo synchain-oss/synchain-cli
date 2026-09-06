@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
-import { sanitizeInline, sanitizeBlock } from "../util/sanitize.js";
+import { sanitizeInline, sanitizeBlock, shortId } from "../util/sanitize.js";
 
 // Security-critical: these strip terminal-escape sequences from untrusted
 // server strings before they are printed. A regex regression here silently
@@ -47,6 +47,30 @@ describe("sanitizeInline", () => {
     // the line above it in the caller's terminal.
     expect(sanitizeInline("my-band\u001b[2K\rowned")).toBe("my-band owned");
     expect(sanitizeInline("\u001b]0;pwned\u0007neon-tide")).toBe("neon-tide");
+  });
+});
+
+describe("shortId", () => {
+  it("trims a server id to 8 characters by default", () => {
+    expect(shortId("dddd4444-4444-4444-8444-444444444444")).toBe("dddd4444");
+  });
+
+  it("sanitizes before slicing, so the cut can never leave a bare ESC", () => {
+    // The order is the whole point: slice first and the truncation itself becomes the
+    // injection — the cut can land mid-sequence and emit a stray ESC.
+    const out = shortId("\u001b[2Kdddd4444-4444-4444-8444-444444444444");
+    expect(out).not.toContain("\u001b");
+    expect(out).toBe("dddd4444");
+  });
+
+  it("honours an explicit length", () => {
+    expect(shortId("dddd4444-4444", 4)).toBe("dddd");
+  });
+
+  it("handles non-string values without throwing", () => {
+    // Nothing in the CLI verifies a server actually returned a string id before printing it.
+    expect(shortId(null)).toBe("");
+    expect(shortId(undefined)).toBe("");
   });
 });
 

@@ -20,7 +20,7 @@ import { Progress } from "../util/progress.js";
 import { promptConfirm } from "../util/prompt.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { assertSafeBaseUrl } from "../util/url.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 
 interface FileDTO {
   id: string;
@@ -194,7 +194,7 @@ export async function runFilesLs(flags: FilesFlags): Promise<void> {
       return;
     }
     const rows = result.files.map((f) => ({
-      id: f.id.slice(0, 8),
+      id: shortId(f.id),
       name: f.name,
       size: formatBytes(f.size),
       mime: f.mimeType,
@@ -318,7 +318,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       // reclaimed by server-side cleanup — then let the outer handler print the error.
       process.stderr.write(
         pc.yellow(
-          `\nNote: the bytes were uploaded to storage (key: ${upload.key}) but registering the file ` +
+          `\nNote: the bytes were uploaded to storage (key: ${sanitizeInline(upload.key)}) but registering the file ` +
             `record failed. Retrying re-uploads the bytes; the orphaned object is reclaimed server-side.\n`
         )
       );
@@ -328,7 +328,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Created file ${created.file.id}`));
+      console.log(pc.green(`Created file ${sanitizeInline(created.file.id)}`));
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
@@ -424,7 +424,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       // Defense-in-depth: the derived target must not escape the working dir.
       const cwd = process.cwd();
       if (absOut !== cwd && !absOut.startsWith(cwd + path.sep)) {
-        throw new Error(`Refusing to write outside the working directory: ${absOut}`);
+        throw new Error(`Refusing to write outside the working directory: ${sanitizeInline(absOut)}`);
       }
       // Never silently overwrite an existing local file with a server-derived name.
       absOut = await nextAvailablePath(absOut);
@@ -455,7 +455,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       const writeStream = createWriteStream(absOut!);
       await pipeline(nodeStream, writeStream);
       guard.clear();
-      progress.finish(`downloaded to ${absOut}`);
+      progress.finish(`downloaded to ${sanitizeInline(absOut)}`);
     }
   } catch (err) {
     if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
@@ -489,7 +489,7 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
     } else {
       console.log(
         pc.green(
-          `Moved ${sanitizeInline(resolved.name)} to ${folderId === null ? "root" : folderId}.`
+          `Moved ${sanitizeInline(resolved.name)} to ${folderId === null ? "root" : sanitizeInline(folderId)}.`
         )
       );
     }
@@ -531,7 +531,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
     // 2. Confirm (skipped with --yes for non-interactive use).
     if (!flags.yes) {
       const ok = await promptConfirm(
-        `Delete ${sanitizeInline(resolved.name)} (${resolved.id.slice(0, 8)})?`,
+        `Delete ${sanitizeInline(resolved.name)} (${shortId(resolved.id)})?`,
         false
       );
       if (!ok) {
@@ -545,7 +545,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${resolved.id.slice(0, 8)}).`));
+    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
     process.exitCode = 1;
@@ -613,7 +613,7 @@ export async function runFilesRename(
       }
       console.log(
         pc.green(
-          `Renamed ${sanitizeInline(resolved.name)} → ${sanitizeInline(result.file.name)} (id: ${resolved.id.slice(0, 8)}).`
+          `Renamed ${sanitizeInline(resolved.name)} → ${sanitizeInline(result.file.name)} (id: ${shortId(resolved.id)}).`
         )
       );
     } catch (err) {
@@ -625,7 +625,7 @@ export async function runFilesRename(
         return;
       }
       if (err instanceof ApiError && err.status === 404) {
-        console.error(pc.red(`File ${resolved.id} not found.`));
+        console.error(pc.red(`File ${sanitizeInline(resolved.id)} not found.`));
         process.exitCode = 1;
         return;
       }

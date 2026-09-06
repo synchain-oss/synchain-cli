@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
-import { folderLabel, renderTree, shortFolderId } from "../commands/folders.js";
+import { folderLabel, renderTree } from "../commands/folders.js";
 
 // `folders.ts` had zero sanitizing: `renderTree` builds its own lines instead of going through
 // `renderTable`, so it never inherited `toCell`'s ANSI stripping, and the three success lines
@@ -20,19 +20,6 @@ function folder(p: { id: string; name: string; parentId?: string | null }) {
     createdBy: null,
   };
 }
-
-describe("shortFolderId", () => {
-  it("trims to 8 characters", () => {
-    expect(shortFolderId("dddd4444-4444-4444-8444-444444444444")).toBe("dddd4444");
-  });
-
-  it("sanitizes before slicing, so the cut cannot leave a bare ESC", () => {
-    // Order is load-bearing: slicing first could cut through an escape sequence and emit a
-    // stray ESC into the terminal.
-    const out = shortFolderId(`${ESC}[2Kdddd4444-4444-4444-8444-444444444444`);
-    expect(out).not.toContain(ESC);
-  });
-});
 
 describe("folderLabel", () => {
   it("renders name and short id", () => {
