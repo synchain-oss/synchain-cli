@@ -79,11 +79,16 @@ export async function resolveByPrefix<T extends { id: string }>(
   if (exact) return exact;
   const matches = all.filter((x) => x.id.startsWith(input));
   if (matches.length === 1) return matches[0]!;
+  // Echoed back sanitized, for the same reason the three messages in `resolveProjectRef` are:
+  // these travel to the terminal through each command's `console.error(pc.red(err.message))`,
+  // which does **not** go through `formatApiError` and so gets none of its sanitizing. `input`
+  // is argv (self-inflicted rather than cross-tenant), but two resolvers in one file disagreeing
+  // about whether their echoed input is safe is worse than either answer on its own.
   if (matches.length === 0) {
-    throw new Error(`No ${label} matches "${input}".`);
+    throw new Error(`No ${label} matches "${sanitizeInline(input)}".`);
   }
   throw new Error(
-    `${label} prefix "${input}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`
+    `${label} prefix "${sanitizeInline(input)}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`
   );
 }
 

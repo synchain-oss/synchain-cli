@@ -296,9 +296,10 @@ describe("formatApiError", () => {
     const body = Array.from({ length: 20 }, () => "a".repeat(99)).join("\n");
     const out = formatApiError(new ApiError(500, "https://x", body));
     expect(out).toContain("[truncated]");
-    // And the cap actually bounds the output — the discriminating assertion above says *that*
-    // truncation happened; this one says it was worth doing.
-    expect(out.length).toBeLessThan(2200);
+    // And the cap actually bounds the output. The window is narrow on purpose: this body renders
+    // to 2042 characters capped and 2063 uncapped, so a loose bound (2200, 2100) passes either
+    // way and asserts nothing. 2050 is inside that 21-character gap.
+    expect(out.length).toBeLessThan(2050);
   });
 
   it("withErrorBody omits the body block entirely when there is nothing to show", () => {

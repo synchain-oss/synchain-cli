@@ -36,6 +36,23 @@ describe("resolveByPrefix", () => {
     await expect(resolveByPrefix("zzzz", all, "file")).rejects.toThrow(/No file matches/);
   });
 
+  it("ANSI-sanitizes the input it echoes back in both error messages", async () => {
+    // These messages reach the terminal through each command's `console.error(pc.red(err.message))`
+    // — which does **not** go through `formatApiError`, so it inherits none of its sanitizing.
+    // `input` is argv, so self-inflicted rather than cross-tenant; the reason to sanitize anyway
+    // is that `resolveProjectRef` in this same file sanitizes the input it echoes, and two
+    // resolvers disagreeing about whether their echoed input is safe is worse than either answer.
+    const noMatch = await resolveByPrefix("zz\u001b[2Kzz", all, "file").catch((e: Error) => e);
+    expect((noMatch as Error).message).not.toContain("\u001b");
+
+    const ambiguous = await resolveByPrefix("aaaa\u001b[31m", async () => [
+      { id: "aaaa\u001b[31m1" },
+      { id: "aaaa\u001b[31m2" },
+    ], "file").catch((e: Error) => e);
+    expect((ambiguous as Error).message).toMatch(/ambiguous/i);
+    expect((ambiguous as Error).message).not.toContain("\u001b");
+  });
+
   it("prefers an exact id over a prefix that also matches a longer id", async () => {
     // "abc" is both an exact id AND a prefix of "abcd": exact must win, not throw
     // ambiguous — this is the branch discussion reply/read rely on.

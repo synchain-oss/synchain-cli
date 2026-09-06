@@ -191,9 +191,12 @@ export function paginationFooter(
   // computable `Showing X–Y of N` into "malformed response" -- and on a single-page result,
   // where this function returns null today, it would conjure a line out of nothing.
   if (!hasNext) return line;
+  // The healthy half of this hint exists to be copied verbatim, so the degraded half must not
+  // keep the `--offset ` prefix: `--offset unavailable` reads as a runnable command and is not
+  // one -- commander rejects it. Say that more exists without offering a flag that cannot work.
   return finite(limit)
     ? `${line} · next page: --offset ${offset + limit}`
-    : `${line} · next page: --offset unavailable (malformed page size)`;
+    : `${line} · more results exist (page size unavailable; pass --offset yourself)`;
 }
 
 export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
