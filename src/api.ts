@@ -134,8 +134,15 @@ export function resolveActiveProject(
 
 /** Cap on the error body that reaches the terminal, measured after indenting. */
 const MAX_ERROR_BODY = 2000;
-/** Cap on how many lines an error body may occupy. */
-const MAX_ERROR_BODY_LINES = 20;
+/**
+ * Cap on how many lines an error body may occupy.
+ *
+ * 40, not 20: the bodies worth reading in full are exactly the tall ones -- a zod 422 listing one
+ * line per rejected field, or a stack trace. Cutting those at 20 costs an agent parsing stderr
+ * the diagnostic it came for, while 40 still bounds how much of the preceding output can be
+ * scrolled away. The character cap remains the backstop for wide bodies.
+ */
+const MAX_ERROR_BODY_LINES = 40;
 
 /**
  * Renders a raw error body for the terminal: ANSI-sanitized, indented, and capped.
@@ -194,10 +201,22 @@ export function formatErrorBody(raw: unknown): string {
  * writing the parsed form back — but that content comes from the user's own argv, so it is
  * self-inflicted rather than attacker-supplied.
  */
+/**
+ * A headline with an error body rendered under it, or the headline alone when there is none.
+ *
+ * One owner for this composition. It was briefly hand-replicated at the storage-PUT call site in
+ * `files.ts`, and a hand-replicated copy of an untested wiring is exactly what drifts: the
+ * two-space continuation prefix here is what makes {@link formatErrorBody}'s own indentation line
+ * up, so a copy that loses it silently reopens the line-spoofing this all guards against.
+ */
+export function withErrorBody(headline: string, raw: unknown): string {
+  const body = formatErrorBody(raw);
+  return body ? `${headline}\n  ${body}` : headline;
+}
+
 export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
-    const bodyStr = formatErrorBody(err.body);
-    return `API error ${err.status} ${err.url}${bodyStr ? `\n  ${bodyStr}` : ""}`;
+    return withErrorBody(`API error ${err.status} ${err.url}`, err.body);
   }
   if (err instanceof Error) return err.message;
   return String(err);

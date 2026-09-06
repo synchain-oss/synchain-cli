@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   response verbatim, bypassing the sanitizing `formatApiError` gained in 0.7.0 -- and over a wider
   trust boundary, since that body comes from whatever host the API returned in `uploadUrl`, not
   from the configured API host.
+- **Numeric server fields are sanitized too.** `number` is a compile-time claim, not a runtime
+  one: `apiFetch` is a bare `res.json() as T`, so a field declared `total: number` can arrive as
+  a string carrying an escape. Counts look like the last place an escape could hide, which is
+  exactly why they were skipped. Validation runs *before* the arithmetic -- `offset + 1` on a
+  string is concatenation, so a check on the result would already be too late.
 - **Error bodies are capped by line count as well as by characters.** The two bound different
   things: characters keep stderr from flooding, lines keep the error's own first line from
   scrolling out of view. 2000 characters of newlines is still ~666 lines.

@@ -89,6 +89,17 @@ describe("threadTableRows", () => {
 });
 
 describe("paginationFooter", () => {
+  it("refuses to do arithmetic on a total that only claims to be a number", () => {
+    // `apiFetch` is a bare `res.json() as T`, so a field declared `total: number` can arrive as
+    // a string carrying an escape -- and `offset + 1` on a string is concatenation, so a check
+    // applied after the arithmetic would already be too late. A malformed page renders what
+    // arrived, sanitized, instead of arithmetic performed on it.
+    const out = paginationFooter(0, 3, "9\u001b[2K" as unknown as number, 50);
+    expect(out).not.toBeNull();
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("malformed");
+  });
+
   it("returns null when a single page covers every thread", () => {
     expect(paginationFooter(0, 3, 3, 50)).toBeNull();
     expect(paginationFooter(0, 0, 0, 50)).toBeNull();
