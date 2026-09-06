@@ -127,7 +127,7 @@ function refKey(value: string | null | undefined): string | null {
 
 /**
  * The **spoken form** key of a custom ID: `refKey` with hyphens removed, matching the
- * server's own uniqueness key (its global unique index is built on the hyphen-stripped
+ * server's own uniqueness key (its global uniqueness rule is built on the hyphen-stripped
  * form, so claiming `neon-tide` also locks `neontide`, and either spelling resolves to
  * the same project).
  *

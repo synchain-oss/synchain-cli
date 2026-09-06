@@ -137,7 +137,7 @@ const MAX_ERROR_BODY = 2000;
 /**
  * Cap on how many lines an error body may occupy.
  *
- * 40, not 20: the bodies worth reading in full are exactly the tall ones -- a zod 422 listing one
+ * 40, not 20: the bodies worth reading in full are exactly the tall ones -- a 422 listing one
  * line per rejected field, or a stack trace. Cutting those at 20 costs an agent parsing stderr
  * the diagnostic it came for, while 40 still bounds how much of the preceding output can be
  * scrolled away. The character cap remains the backstop for wide bodies.

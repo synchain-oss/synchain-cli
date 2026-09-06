@@ -7,32 +7,34 @@
 - 沟通语言:中文。面向外部贡献者的 issue/PR 回复,用对方使用的语言。
 - Git 提交身份:`DLsnows`。
 - 技术栈:Node.js ≥ 20、TypeScript(ESM)、commander、vitest。
+- 维护者口径(runner 版本、内部规划编号的处理)见 [docs/MAINTAINERS.md](./docs/MAINTAINERS.md)。
 
-### §0 安全铁律(三仓逐字相同,真源 = 12 §2.1 / 06 §8.4)
+### §0 安全铁律
 
 1. 任何 key/token 绝不明文入库,包括测试用的假 key(secret scanning push protection 会直接拒推)。
 2. workflow 里引用 secret 只能用 ${{ secrets.X }};禁止 echo 到日志、禁止写进 artifact。
 3. 新增第三方 action 必须 pin 到 40 位 commit SHA(注释写版本号便于 dependabot 升级);
    @v2 / @main 这类可变 ref 一律不接受,org 白名单里的 owner/repo@* 通配不构成防护。
-4. 【J20 安全禁令,ADR-011 v1 新增安全条款】任何 workflow 一律不得使用 pull_request_target。
+4. 【安全禁令】任何 workflow 一律不得使用 pull_request_target。
    这不是"不推荐"、不是"审计过就能用" —— 本项目不接受逐版本审计作为豁免理由。
-   fork PR 的 AI 审查只走 §6.2 方案 D(维护者 /review 显式触发)或方案 C(workflow_run 两阶段,
-   全程不 checkout PR 代码);其余情况 fork PR 只跑无 secrets 的构建/测试(J31)。
-   机器检查:grep -r pull_request_target .github/workflows 零命中(06 §2.4 checklist + CI 断言)。
+   fork PR 的 AI 审查只走「维护者在 PR 上评论 /review 显式触发」(review-dispatch.yml),
+   或 workflow_run 两阶段(全程不 checkout PR 代码);其余情况 fork PR 只跑无 secrets 的构建/测试。
+   机器检查:grep -r pull_request_target .github/workflows 零命中。
 5. 所有消费仓库外部文本的自动化(review bot、issue 分流、release notes 生成)的 prompt 末尾
-   必须带「不可信数据声明」(06 §3.4 固定结尾);issue 分流 agent 额外受操作白名单约束(§6.1)。
+   必须带「不可信数据声明」(固定结尾,现行文本见 claude-review.yml 的 prompt 末尾);
+   issue 分流 agent 额外受操作白名单约束。
 
 ## 1. 分支模型与工作流程
 
-- dev 为默认主干(无 stage/prod)。主支线 = `feature/extraction`(J13);子支线 = `feat/<TASK-ID>-<slug>`(ADR-013)。
+- dev 为默认主干(无 stage/prod)。主支线 = `feature/extraction`;子支线 = `feat/<TASK-ID>-<slug>`。
 - same-repo PR:仅接受 `feat/*` | `feature/*` 来源;另放行 `dependabot/*`。
-- fork PR(J31/J41):免除 `feat/*` 命名规则,但 head 分支名不得为 `dev`/`stage`/`prod`/`feature/v1`/`feature/extraction`;只跑无 secrets 的构建/测试,review bot 不自动跑,维护者手工加 `external` label。
+- fork PR:免除 `feat/*` 命名规则,但 head 分支名不得为 `dev`/`stage`/`prod`/`feature/v1`/`feature/extraction`;只跑无 secrets 的构建/测试,review bot 不自动跑,维护者手工加 `external` label。
 - branch-gate(required context)还承担 DCO(Signed-off-by)与冻结契约 path guard 两条断言。
 - commit 规范:`type(scope): 描述`,描述可中可英;必须 `git commit -s`(DCO)。
 
 ## 2. 提 PR 前的本地 Gates
 
-子 PR(base = `feature/extraction`)不触发完整 CI(D2),本地必须跑:
+子 PR(base = `feature/extraction`)不触发完整 CI,本地必须跑:
 
 ```bash
 npm ci
@@ -43,11 +45,11 @@ npm pack --dry-run
 npm audit --audit-level=high
 ```
 
-一键:`npm run gates`(package.json 里串起来,C02 交付)。合规扫描(gitleaks + reuse lint)见 §6,不进 `npm run gates` 字符串。
+一键:`npm run gates`(package.json 里串起来)。合规扫描(gitleaks + reuse lint)见 §6,不进 `npm run gates` 字符串。
 
 ## 3. 评审规则
 
-处理完所有 comment(不止 review bot 的),逐条回复/修改/标记 Resolve(D2)。子 PR 上未 Resolve 的 comment 会禁用 merge 按钮(`feature/extraction` 生命周期保护)。
+处理完所有 comment(不止 review bot 的),逐条回复/修改/标记 Resolve。子 PR 上未 Resolve 的 comment 会禁用 merge 按钮(`feature/extraction` 生命周期保护)。
 
 ## 4. 各 Workflow 触发范围一览
 
@@ -55,7 +57,7 @@ npm audit --audit-level=high
 | --- | --- | --- | --- |
 | `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
 | `branch-gate` | `ubuntu-latest` | PR → dev | 分支命名 + DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
-| `claude-review` / `deepseek-review` | `ubuntu-latest` | same-repo PR | 二选一 enable(U8);fork PR 不跑 |
+| `claude-review` / `deepseek-review` | `ubuntu-latest` | same-repo PR | 二选一 enable;fork PR 不跑 |
 | `pr-agent` | `ubuntu-latest` | same-repo PR | docker action,必须 latest;fork PR 不跑 |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
 

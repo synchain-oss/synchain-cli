@@ -371,7 +371,7 @@ export async function runDiscussionReply(
 
     // a full UUID posts directly — only an 8-char prefix needs the
     // full-thread fetch (discussion has no single-post GET to resolve against).
-    // The server's zod schema rejects non-UUIDs and the POST validates that the
+    // The server rejects non-UUIDs at request validation, and the POST validates that the
     // parent exists (its 404 is handled below), so no client-side pre-check is lost.
     const parentId = isUuid(parentPostId)
       ? parentPostId

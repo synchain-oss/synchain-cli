@@ -23,11 +23,12 @@ import * as path from "node:path";
  * ## What it deliberately does NOT guard
  *
  * **Internal planning codenames and doc references** — `J20`, `C10`, `ADR-013`, `12 §2.1` and
- * friends, currently spread across ~15 files (workflows, `REUSE.toml`, `.gitleaks.toml`,
- * `docs/contract-changes/`, `CLAUDE.md`). They are not implementation leaks: they expose no
- * backend internals, only that a planning system exists which readers cannot follow. Cleaning
- * them up is a writing task with judgement in it — some references are load-bearing for
- * maintainers — so it belongs to whoever owns the publicization pass, not to a regex here.
+ * friends. They are not implementation leaks: they expose no backend internals, only that a
+ * planning system exists which readers cannot follow. They were taken out of the public text by
+ * a writing pass rather than by a pattern, and deliberately so: the load-bearing ones had to be
+ * rewritten as self-contained prose instead of deleted, and a regex wide enough to catch every
+ * shape above would also fire on ordinary text (`C10` is a legal hex fragment). What keeps them
+ * from coming back is the convention in `docs/MAINTAINERS.md` — a convention, not a check.
  *
  * That split is stated because an earlier version of this comment claimed to cover the
  * codenames too. A guard whose description is broader than its patterns is worse than no

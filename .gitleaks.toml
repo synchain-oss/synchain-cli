@@ -1,5 +1,5 @@
 # gitleaks 配置 — Synchain CLI
-# 版本钉见 .gitleaks-version(与 .juce-version / .pluginval-version 同模式,06 §3.10 / 09 §1.6)。
+# 版本钉见 .gitleaks-version。
 
 title = "gitleaks config — Synchain CLI"
 
@@ -7,7 +7,7 @@ title = "gitleaks config — Synchain CLI"
 [extend]
 useDefault = true
 
-# [allowlist] 是必需项,不是可选项(09 §1.6):CLI 的公开文档故意出现
+# [allowlist] 是必需项,不是可选项:CLI 的公开文档故意出现
 # synch_live_sk_ 凭据占位形态,不放行则首跑必红。误报逐条登记并写明理由,
 # 不得用 --no-verify 绕过。
 [allowlist]

@@ -8,7 +8,7 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 2
 
-# Markdown 保留行尾两空格(软换行),关闭 trim(12 §1.8)
+# Markdown 保留行尾两空格(软换行),关闭 trim
 [*.md]
 trim_trailing_whitespace = false
 

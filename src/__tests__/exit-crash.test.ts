@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { runMembersLs } from "../commands/members.js";
 import { runProjectLs } from "../commands/project.js";
 
-// C10 exit-crash 回归:API 错误路径(400/401)后不得调用 process.exit()——那会在 Windows 上
+// exit-crash 回归:API 错误路径(400/401)后不得调用 process.exit()——那会在 Windows 上
 // 跳过事件循环排水、触发 undici/uv handle 关闭竞态断言崩溃(exit -1073740791)。正确行为是
 // 设 process.exitCode = 1 后 return,让事件循环排空后按码自然退出。
 
@@ -53,7 +53,7 @@ function stubFetch(status: number): ReturnType<typeof vi.fn> {
   return spy;
 }
 
-describe("API 错误路径不再 process.exit(C10 exit-crash 回归)", () => {
+describe("API 错误路径不再 process.exit(exit-crash 回归)", () => {
   it("members ls 收到 API 400 时设 exitCode=1 且不调用 process.exit", async () => {
     stubFetch(400);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);

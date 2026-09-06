@@ -216,7 +216,7 @@ describe("resolveProjectRef", () => {
 
   it("matches on the spoken form: hyphen-less `myband` must hit `my-band`", async () => {
     // This is the entire reason the feature exists: someone reads "my band" to you over
-    // the phone and you cannot hear whether they typed a hyphen. The server's unique index
+    // the phone and you cannot hear whether they typed a hyphen. The server's uniqueness rule
     // is built on the hyphen-stripped key — claiming `my-band` also locks `myband`, and a
     // browser resolves either spelling to the same project.
     // Reproduced live on 2026-09-05: comparing `customId` byte-for-byte made one string
@@ -362,8 +362,8 @@ describe("resolveProjectRef", () => {
   });
 
   it("resolves an upper-case full UUID (isUuid accepts it; comparison is byte-wise on lowercase ids)", async () => {
-    // The same upper-case UUID works via `--project` (the server's own check is
-    // case-insensitive, and Postgres accepts upper-case literals). Without folding here you
+    // The same upper-case UUID works via `--project` (the server's own comparison is
+    // case-insensitive). Without folding here you
     // would get "recognised as a UUID" immediately followed by "no such project".
     const r = await resolveProjectRef("AAAA1111-1111-4111-8111-111111111111", allProjects);
     expect(r.name).toBe("Alpha");

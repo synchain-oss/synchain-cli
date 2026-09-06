@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-README 双语结构对等检查(12 §1.2)。三仓共用,从本模板复制。
+README 双语结构对等检查。
 
-- 双文件模式(SCVB/Bridge,默认):比对 -A 与 -B 两个文件的标题骨架(层级 + 顺序),剔除代码围栏。
+- 双文件模式(默认):比对 -A 与 -B 两个文件的标题骨架(层级 + 顺序),剔除代码围栏。
+  适用于 README 与 README.zh-CN 分开成两份的仓库;本仓是单文件双语,用不到这个模式
+  (为什么保留见 docs/MAINTAINERS.md)。
   标题文本不比(本来就是两种语言),只比 (层级, 序号) 序列。
-- -SingleFile 模式(CLI,09 §1.4 单文件双语例外):断言同一文件里存在 ## 简体中文 锚点,
+- -SingleFile 模式(本仓用的就是这个):断言同一文件里存在 ## 简体中文 锚点,
   且锚点两侧(英文侧/中文侧)的章节标题序列(层级 + 顺序)相同。
 
 用法:
@@ -64,7 +66,7 @@ if ($PSCmdlet.ParameterSetName -eq 'SingleFile') {
   exit 0
 }
 
-# ── 双文件模式(SCVB/Bridge)──
+# ── 双文件模式(本仓不用,见文件头说明)──
 $sa = Get-HeadingSeq -Path $A
 $sb = Get-HeadingSeq -Path $B
 $n = [Math]::Max($sa.Count, $sb.Count)
