@@ -59,5 +59,11 @@ describe("user-facing strings", () => {
       `${rel} states a URL literally; import it from a constant instead:\n` +
         hits.map((h) => `  :${h.no}  ${h.line.slice(0, 100)}`).join("\n")
     ).toEqual([]);
+    // The other half of "they read the constant". `toContain("DEFAULT_BASE_URL")` alone would
+    // NOT do it -- the import line satisfies that on its own, so deleting the hint while leaving
+    // the import behind would still pass. Counting occurrences distinguishes "imported" from
+    // "actually used": every one of these files imports it once and uses it at least once.
+    const uses = src.split("DEFAULT_BASE_URL").length - 1;
+    expect(uses, `${rel} imports DEFAULT_BASE_URL but never uses it`).toBeGreaterThan(1);
   });
 });
