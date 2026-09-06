@@ -56,7 +56,8 @@ jobs:
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: gh pr checkout "${{ github.event.issue.number }}"
 
-      # prompt 与 allowedTools 与 claude-review.yml 完全共用同一份(唯一真源 = claude-review.yml),
+      # prompt 与 allowedTools 取自 claude-review.yml(唯一真源),逐字相同 —— 只有 `PR NUMBER:`
+      # 那行必须按事件类型取 github.event.issue.number(本 workflow 是 issue_comment 事件)。
       # 末尾必带同一份「不可信数据声明」防注入结尾(CLAUDE.md §0 第 5 条)。
       - uses: anthropics/claude-code-action@239e3a730883eeb5c53db12b0fc9573b3024b126   # v1
         with:
