@@ -86,20 +86,24 @@
   工作树移除,但内容仍在 git 历史里,仓库一转公开即可取回。上一节的 `secret-history`
   覆盖不到它 —— 那条找的是凭据,不是配置现状。要真正清掉只能改写历史,必须排在
   「点 public」**之前**。
-- **commit message**:同在 git 对象库里,但上一条的 `--path` 与 blob callback 都够不着它 ——
-  两者只作用于文件内容与路径,而 commit message 是 commit 对象上的独立字段,要动得走
-  `--message-callback`。一并检一遍,别只过文件面。另:合并 PR 时别把「PR 标题 + 描述」
-  设成 squash commit body,否则下一条那类内容会从 GitHub 侧跨进 git 对象库。
+- **commit message**:同在 git 对象库里,但「git 历史」那一条给的两个手段(`--path`、
+  blob callback)都够不着它 —— 两者只作用于文件内容与路径,而 commit message 是 commit
+  对象上的独立字段,要动得走 `--message-callback`。一并检一遍,别只过文件面。另:合并 PR
+  时别把「PR 标题 + 描述」设成 squash commit body,否则「PR / issue 讨论区」那一条里的
+  内容会从 GitHub 侧跨进 git 对象库。
 - **PR / issue 讨论区**:仓库转公开时它们一并公开,而历史改写动不到这部分 —— 那是 GitHub
   侧的数据,不在 git 对象库里。那份 ops 文档的内容、以及本节自己的全文,在若干 PR 描述与
   review thread 里被复述过。翻公开前按同一口径复核一遍,注意两者的可行动作不同:
   **评论**直接删除,不要编辑 —— 被编辑过的内容会留一份修订历史,任何能看到它的人都点得开,
   编辑等于没删;**PR 描述**删不掉(PR 本身也不能删),只能先编辑掉那段文字,再逐条清掉该
   条目的修订历史 —— 那是第二个动作,不会随编辑自动发生。否则历史清干净了、讨论区还留着。
-- **Actions run 日志**:与上一条同类(GitHub 侧数据,历史改写动不到),但落点不同 ——
-  公开仓的 workflow 运行日志任何人可读。三个 review workflow 的 run 日志里带着完整的
-  PR 描述与 review 正文,也就是说上一条要复核的那些文字有一份副本在这里。处置:删掉相关
-  run,或等它过期(留存期由仓库设置决定,默认 90 天)。
+- **Actions run 日志**:与「PR / issue 讨论区」那一条同类(GitHub 侧数据,历史改写动不到),
+  但落点不同 —— 公开仓的 workflow 运行日志任何人可读。**所有跑 AI 审查的 workflow**
+  (本仓现为 `claude-review` / `deepseek-review` / `review-dispatch` / `pr-agent` 四份,
+  别按数字找,按「是否读 PR 文本」判)的 run 日志里带着完整的 PR 描述与 review 正文,
+  也就是说那一条要复核的那些文字有一份副本在这里。处置:删掉相关 run;或先把 Settings
+  里的日志留存期调到最小(公开仓可设 1 天),**等它过期之后再点 public** —— 留存期默认
+  90 天,先点 public 再等过期,等于把这些内容公开 90 天。
 - 同一次改写里把历史中其他不该公开的内容一并处理掉,别分两次:每次改写都会换掉全部
   commit SHA,连带废掉已有 tag、已合并 PR 的引用,以及任何已存在的 clone/fork。
 - 上一节最后那条覆盖全部 ref 的一次性扫描,也在这个时间点做。
