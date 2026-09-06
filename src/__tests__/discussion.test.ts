@@ -89,6 +89,32 @@ describe("threadTableRows", () => {
 });
 
 describe("paginationFooter", () => {
+  it("degrades only the next-page hint when just the page size is malformed", () => {
+    // `limit` feeds nothing but the hint. Folding it into the same guard as offset/count/total
+    // would let a server that mangles only `limit` wipe out an otherwise perfectly computable
+    // `Showing X–Y of N` — and on a single-page result, where this returns null, it would
+    // conjure a line out of nothing.
+    const out = paginationFooter(0, 3, 10, "5x" as unknown as number);
+    expect(out).toContain("Showing 1");
+    expect(out).toContain("of 10 threads");
+    expect(out).toContain("unavailable");
+  });
+
+  it("still returns null for a single page even when the page size is malformed", () => {
+    expect(paginationFooter(0, 3, 3, "5x" as unknown as number)).toBeNull();
+  });
+
+  it("refuses to do arithmetic on a total that only claims to be a number", () => {
+    // `apiFetch` is a bare `res.json() as T`, so a field declared `total: number` can arrive as
+    // a string carrying an escape -- and `offset + 1` on a string is concatenation, so a check
+    // applied after the arithmetic would already be too late. A malformed page renders what
+    // arrived, sanitized, instead of arithmetic performed on it.
+    const out = paginationFooter(0, 3, "9\u001b[2K" as unknown as number, 50);
+    expect(out).not.toBeNull();
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("malformed");
+  });
+
   it("returns null when a single page covers every thread", () => {
     expect(paginationFooter(0, 3, 3, 50)).toBeNull();
     expect(paginationFooter(0, 0, 0, 50)).toBeNull();

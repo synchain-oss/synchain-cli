@@ -17,6 +17,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The two help strings that spelled the default host out now read the constant instead. That
   duplication is why the value was wrong in three places at once.
 
+### Security
+- **`folders ls` no longer lets a folder name drive your terminal.** `renderTree` built its own
+  lines instead of going through `renderTable`, so it never inherited that funnel's ANSI
+  stripping -- and neither did the `folders create` / `rm` / `rename` success lines. Folder names
+  are set by any member of the project, which made this the most reachable escape-injection point
+  in the CLI: no hostile server, no `--base-url`, nothing to get past. One member renames a
+  folder; the next person to run `folders ls` wears it. (`files ls` in the same file was always
+  safe, because it goes through `renderTable`.)
+- **`files upload` sanitizes the storage error body.** A failed storage `PUT` printed the remote
+  response verbatim, bypassing the sanitizing `formatApiError` gained in 0.7.0 -- and over a wider
+  trust boundary, since that body comes from whatever host the API returned in `uploadUrl`, not
+  from the configured API host.
+- **Numeric server fields are sanitized too.** `number` is a compile-time claim, not a runtime
+  one: `apiFetch` is a bare `res.json() as T`, so a field declared `total: number` can arrive as
+  a string carrying an escape. Counts look like the last place an escape could hide, which is
+  exactly why they were skipped. Validation runs *before* the arithmetic -- `offset + 1` on a
+  string is concatenation, so a check on the result would already be too late.
+- **Error bodies are capped by line count as well as by characters.** The two bound different
+  things: characters keep stderr from flooding, lines keep the error's own first line from
+  scrolling out of view. 2000 characters of newlines is still ~666 lines.
+- **Every remaining server string now goes through the sanitizer, and every shortened id goes
+  through one shared `shortId` helper** that sanitizes *before* slicing -- cutting first can land
+  mid-escape and make the truncation itself the injection. This closed a dozen further sites an
+  audit turned up beyond the two originally reported: the download path printed on completion
+  (sanitized 19 lines earlier in the same flow, but not here), the notification line's id / type /
+  timestamp, `relativeTime` and `formatLocal` returning the raw string when parsing fails, ids
+  echoed by `files`/`discussion`/`calendar` success and 404 lines, the storage key in the upload
+  warning, and the logout confirmation prompt -- the one server string fed to a prompt rather than
+  to `console.*`, which is why a `grep console` sweep never saw it.
+
 ## [0.7.0] - 2026-09-05
 
 Adds custom project IDs to `project use` / `project ls`.

@@ -2,7 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { userLabel, type MeResponse } from "./login.js";
 
 export interface WhoamiFlags {
@@ -29,7 +29,7 @@ export function activeProjectLine(active: { id: string; name?: string | null }):
   // is a canonical UUID before saving -- but that assertion is new in this release: 0.6.0
   // wrote through whatever the server sent, so a poisoned id may already be sitting in a
   // config on disk, and 8 characters is room enough for an erase-line sequence.
-  const short = sanitizeInline(active.id).slice(0, 8);
+  const short = shortId(active.id);
   return `Active project: ${label} (${short})`;
 }
 

@@ -7,6 +7,7 @@ import {
   apiFetch,
   ApiError,
   formatApiError,
+  withErrorBody,
   resolveActiveProject,
   wantsJson,
   type ApiFetchOptions,
@@ -275,12 +276,39 @@ describe("formatApiError", () => {
     expect(out).toContain("[truncated]");
   });
 
-  it("caps on what is actually printed, counting the indent it adds", () => {
-    // The cap runs after indenting, not before. Capping first, a body of 2000 newlines would
-    // still print ~6000 characters over 1000 lines — and newlines are the cheapest way to push
-    // what the user needed to read off the screen, which is the very thing the cap exists for.
-    const out = formatApiError(new ApiError(500, "https://x", "\n".repeat(2000)));
-    expect(out.length).toBeLessThan(2200);
+  it("caps line count, not just characters", () => {
+    // The two caps defend different things and are not interchangeable. 2000 characters of
+    // newlines is still ~666 lines — more than enough to scroll the `API error <status> <url>`
+    // line, printed *first*, out of the reader's scroll-back, which is the very outcome the cap
+    // exists to prevent. Characters bound how much stderr is flooded; lines bound how much of
+    // what came before survives.
+    const out = formatApiError(new ApiError(500, "https://x", "line\n".repeat(500)));
+    expect(out.split("\n").length).toBeLessThan(45);
+    expect(out).toContain("[truncated]");
+  });
+
+  it("counts the indent it adds when measuring against the character cap", () => {
+    // Deliberately sized to be *discriminating*: 20 lines of 99 characters is 1999 characters
+    // raw — just under the 2000 cap — but 2037 once each continuation line gains its two-space
+    // prefix. Measure before indenting and this body passes through whole; measure after and it
+    // is cut. (An earlier version of this test used 2000 newlines, which tripped the line cap
+    // first and so proved nothing about the character path.)
+    const body = Array.from({ length: 20 }, () => "a".repeat(99)).join("\n");
+    const out = formatApiError(new ApiError(500, "https://x", body));
+    expect(out).toContain("[truncated]");
+    // And the cap actually bounds the output. The window is narrow on purpose: this body renders
+    // to 2042 characters capped and 2063 uncapped, so a loose bound (2200, 2100) passes either
+    // way and asserts nothing. 2050 is inside that 21-character gap.
+    expect(out.length).toBeLessThan(2050);
+  });
+
+  it("withErrorBody omits the body block entirely when there is nothing to show", () => {
+    // The storage-PUT call site composes through this too, so the shape has one owner. A copy
+    // that lost the two-space prefix would silently reopen the line-spoofing the indent guards.
+    expect(withErrorBody("Storage PUT failed: 500", "")).toBe("Storage PUT failed: 500");
+    expect(withErrorBody("Storage PUT failed: 500", "boom")).toBe(
+      "Storage PUT failed: 500\n  boom"
+    );
   });
 
   it("returns the message for a generic Error", () => {

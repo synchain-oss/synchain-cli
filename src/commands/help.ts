@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
 import { DEFAULT_BASE_URL } from "../config.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { CALENDAR_HELP } from "./calendar.js";
 import { DISCUSSION_HELP } from "./discussion.js";
 import { MEMBERS_HELP } from "./members.js";
@@ -137,7 +138,9 @@ export function runHelp(topic: string | undefined): void {
   }
   const t = TOPICS[topic.toLowerCase()];
   if (!t) {
-    console.error(pc.red(`Unknown help topic: ${topic}`));
+    // argv-sourced (self-inflicted, not cross-tenant), sanitized for the same reason the rest
+    // of the CLI is: an unsanitized exception among sanitized neighbours is how the rule erodes.
+    console.error(pc.red(`Unknown help topic: ${sanitizeInline(topic)}`));
     console.error(`Available topics: ${Object.keys(TOPICS).join(", ")}`);
     process.exitCode = 1;
     return;
