@@ -118,13 +118,14 @@ export async function runNotificationsRead(
       if (wantsJson(flags)) {
         console.log(JSON.stringify(res, null, 2));
       } else {
-        const count = safeNumber(res.updated);
+        // Pluralize off **what is actually printed**, not off the raw field. `safeNumber`
+        // returns a string when the value is not a real number, so comparing it to `1` is
+        // always false -- a server sending the string "1" would render "Marked 1
+        // notifications read." Comparing the rendered form makes the grammar agree with the
+        // digit the reader sees, whatever the field turned out to be.
+        const shown = String(safeNumber(res.updated));
         console.log(
-          pc.green(
-            // Pluralize off the *validated* value: a server returning the string "1" would
-            // otherwise render "Marked 1 notifications read."
-            `Marked ${count} notification${count === 1 ? "" : "s"} read.`
-          )
+          pc.green(`Marked ${shown} notification${shown === "1" ? "" : "s"} read.`)
         );
       }
       return;

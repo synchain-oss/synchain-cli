@@ -60,6 +60,15 @@ describe("extensionWarning", () => {
     expect(out).toContain(".mp3");
   });
 
+  it("sanitizes the new extension too (it comes from argv, and the pair is symmetric)", () => {
+    // `nxt` is user-supplied rather than server-supplied, so it is self-inflicted rather than
+    // cross-tenant -- but the two halves of one sentence disagreeing about whether their input
+    // is safe is the exact shape this whole change set spent six rounds removing.
+    const out = extensionWarning("mix.wav", "mix.m\u001b[31mp3");
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain(".wav");
+  });
+
   it("strips C1 control characters, which the local name check does NOT cover", () => {
     // The local check stops at U+007F and never sees C1 (U+0080–U+009F). U+009B *is* CSI to an
     // xterm in 8-bit mode, so a name carrying one looks perfectly legal to that check and still
