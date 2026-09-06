@@ -10,8 +10,11 @@ runs:
       shell: bash
       run: |
         v=$(tr -d '[:space:]' < .gitleaks-version)
-        # 这个串会被拼进下载 URL。.gitleaks-version 是仓库里的普通文件,fork PR 可以任意
-        # 改写它,所以先把格式卡死再用:只接受 x.y.z,`"` `$` 反引号 `;` 一概进不来。
+        # 这个串会被拼进下载 URL,所以先把格式卡死再用:只接受 x.y.z,`"` `$` 反引号 `;`
+        # 一概进不来。
+        # 注意它挡的不是恶意 fork:本文件同样取自工作区(pull_request 下就是 PR head 的那一份),
+        # 能改写 .gitleaks-version 的人也能把这段校验一起改掉。它挡下的是同仓路径上的误写,
+        # 以及把「文件内容 → 命令行文本」这个形态从仓里根除 —— 下一个照抄的人不会再写出可注入的版本。
         printf '%s' "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
           || { echo "::error::.gitleaks-version 必须是 x.y.z,实际读到:$v"; exit 1; }
         echo "GITLEAKS_VERSION=$v" >> "$GITHUB_ENV"

@@ -32,9 +32,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '${{ matrix.node }}', cache: npm }
-      # --ignore-scripts:本 workflow 在 fork PR 上照跑,而 npm ci 默认执行 PR 自带的
-      # lifecycle script(preinstall/prepare)与依赖的 install script = 任意代码执行。
-      # 本项目的构建(tsc)与测试(vitest)都不依赖 install script,实测去掉后全绿。
+      # --ignore-scripts:npm ci 默认执行依赖的 install script 与本包自己的 lifecycle
+      # script。本项目的构建(tsc)与测试(vitest)都不依赖它们,实测去掉后全绿。
+      # 它买到的是依赖侧的收窄 —— lockfile 里被投毒的包不再能在 runner 上执行代码;
+      # 这一条在 same-repo 的 push 路径上同样生效,而那条路径没有 fork 审批兜底。
+      # 它买不到的是「挡住恶意 fork PR」:pull_request 下 workflow 定义取自 PR head,
+      # 作者本来就能直接加一个 run: 步骤。那层防线在仓库设置里(fork PR 审批),不在这里。
       - run: npm ci --ignore-scripts
       - run: npm run typecheck          # tsc --noEmit(覆盖测试文件)
       - run: npm run test -- --coverage # vitest run + 覆盖率阈值(见 vitest.config.mts)
@@ -118,8 +121,11 @@ jobs:
       - name: REUSE lint
         run: pipx run reuse lint
 
-  # secret-history:全历史扫描。compliance 那条带 --no-git,只看工作树 —— 一条推上来
+  # secret-history:扫 git 历史。compliance 那条带 --no-git,只看工作树 —— 一条推上来
   # 又被后续 commit 删掉的凭据,在那里是看不见的。两条覆盖面不同,都要有。
+  # 覆盖面口径:gitleaks 不带 --log-opts 时扫的是 HEAD 可达的祖先(PR 上 = dev 主干线 + 本 PR),
+  # 不是所有 remote ref。覆盖全部 ref 的一次性扫描放在翻公开前手工做(理由见
+  # docs/PUBLIC_LAUNCH_SETTINGS.md):写进 CI 会让一条从不打算合并的旁支上的命中变成常红门禁。
   # 红了只代表历史里有命中,处置(登记 allowlist / 轮换凭据 / 改写历史)是人的判断,不在本 job 里做。
   secret-history:
     name: secret-history
@@ -129,7 +135,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with: { fetch-depth: 0 }        # 默认浅克隆只有 1 个 commit,全历史扫描必须要完整 clone
       - uses: ./.github/actions/setup-gitleaks
-      - name: Secret scan (full git history)
+      - name: Secret scan (git history)
         run: gitleaks detect --redact -v --config .gitleaks.toml
 
   # 聚合 job:required check 只挂这一个;needs 必须列全其余各项,否则其它 job 红了照样能 merge

@@ -17,6 +17,9 @@
   未开启时 Security 标签页不会出现 "Report a vulnerability" 按钮,报告者就只剩
   `SECURITY.md` 第一句禁止的那条路(开 public issue)。
 - 开启 secret scanning 之后,回 Security 标签页把回溯命中项逐条处理掉。
+- **`security@` 别名**:`SECURITY.md` 目前把邮件通道指向 `contact@synchain.ca`。若能建一个
+  专用别名,建它并把 `SECURITY.md` 改指过去 —— 专用地址可以单独限定收件人与路由,
+  而通用联系箱通常更多人可读。
 
 ## 2. 分支保护(默认分支 `dev`)
 
@@ -34,8 +37,9 @@
 - `allowed_actions` 保持 `selected`,白名单只留仓内 workflow 真正引用的 action;
   引用被删掉之后,白名单条目也一并删掉。
 - **Fork pull request workflows from outside collaborators** = **Require approval for all
-  external contributors**。`ci.yml` 会对 fork PR 跑 `npm ci`,这条审批是其中一层防线
-  (另一层是 `ci.yml` 里的 `--ignore-scripts`)。
+  external contributors**。`pull_request` 下 workflow 定义取自 PR head,fork 作者能加任意
+  `run:` 步骤,**这条审批就是那层防线**,没有别的。(`ci.yml` 里的 `--ignore-scripts` 收窄的是
+  依赖侧的面,挡不住这一条。)
 - 第三方 action 一律 pin 到 40 位 commit SHA,行尾注释写版本号便于 dependabot 升级;
   升级时保持 pin。规则原文见 `CLAUDE.md` §0。
 - 不使用 `pull_request_target`。
@@ -57,7 +61,22 @@
 ## 6. 凭据扫描的覆盖面
 
 - `ci.yml` 的 `compliance` job 用 `gitleaks detect --no-git` —— 只扫**工作树**;
-- 全历史由 `ci.yml` 的 `secret-history` job 覆盖(同一份 `.gitleaks.toml`,不带 `--no-git`,
-  需要完整克隆)。
-- 开启 secret scanning 后 GitHub 侧还会独立回溯扫一遍。三者结论不一致时以人工复核为准,
+- `ci.yml` 的 `secret-history` job 扫 **git 历史**(完整 clone + 同一份 `.gitleaks.toml`,
+  不带 `--no-git`)。口径:它扫的是 **HEAD 可达的祖先**,不是所有 remote ref ——
+  只存在于从未合入 `dev` 的旁支上的东西,这条扫不到。
+- 所以翻公开**之前**再单独跑一次覆盖全部 ref 的扫描:完整 clone 后
+  `gitleaks detect --redact -v --config .gitleaks.toml --log-opts=--all`。
+  没把它写进 CI,是因为那样一来,一条从不打算合并的旁支上的命中会让 `cli-gate` 对每个 PR 常红,
+  而处置是人的判断。
+- 开启 secret scanning 后 GitHub 侧还会独立回溯扫一遍。几者结论不一致时以人工复核为准,
   误报请登记进 `.gitleaks.toml` 的 `[allowlist]` 并写明理由,不要用 `--no-verify` 绕过。
+
+## 7. 翻公开前的一次性处置(不是设置项)
+
+- **git 历史**:本仓历史里有过一份内部 ops 待办文档,记录了当时的安全配置状态。文件已从
+  工作树移除,但内容仍在 git 历史里,仓库一转公开即可取回。上一节的 `secret-history`
+  覆盖不到它 —— 那条找的是凭据,不是配置现状。要真正清掉只能改写历史,必须排在
+  「点 public」**之前**。
+- 同一次改写里把历史中其他不该公开的内容一并处理掉,别分两次:每次改写都会换掉全部
+  commit SHA,连带废掉已有 tag、已合并 PR 的引用,以及任何已存在的 clone/fork。
+- 上一节最后那条覆盖全部 ref 的一次性扫描,也在这个时间点做。
