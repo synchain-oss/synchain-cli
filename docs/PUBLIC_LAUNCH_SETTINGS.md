@@ -13,9 +13,9 @@
 
 - **Secret scanning** — 开启。公开仓库免费,并且会回溯扫描既有提交。
 - **Push protection** — 开启,拦下未来误推的凭据。
-- **Private vulnerability reporting** — 开启。`SECURITY.md` 把它列为首选上报通道;
-  未开启时 Security 标签页不会出现 "Report a vulnerability" 按钮,报告者就只剩
-  `SECURITY.md` 第一句禁止的那条路(开 public issue)。
+- **Private vulnerability reporting** — 开启。`SECURITY.md` 把它与邮件并列为两条私密通道,
+  未开启时 Security 标签页不会出现 "Report a vulnerability" 按钮(此时报告者退回邮件通道)。
+  开启的价值在于它自带 GHSA 草稿、私密补丁分支与 CVE 申请,邮件通道没有这些。
 - 开启 secret scanning 之后,回 Security 标签页把回溯命中项逐条处理掉。
 - **`security@` 别名**:`SECURITY.md` 目前把邮件通道指向 `contact@synchain.ca`。若能建一个
   专用别名,建它并把 `SECURITY.md` 改指过去 —— 专用地址可以单独限定收件人与路由,

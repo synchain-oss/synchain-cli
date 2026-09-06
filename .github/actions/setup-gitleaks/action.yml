@@ -1,7 +1,7 @@
 name: Setup gitleaks
 description: 安装 .gitleaks-version 钉住的那个 gitleaks 版本到 /usr/local/bin(仅 linux x64 runner)。
 
-# 本仓有两处扫描(工作树 / 全历史),安装步骤放这里而不是各写一遍 —— 版本校验只要有一份
+# 本仓有两处扫描(工作树 / git 历史),安装步骤放这里而不是各写一遍 —— 版本校验只要有一份
 # 副本被漏改,漏掉的那份就是下面这条注入面的入口。
 runs:
   using: composite
