@@ -28,7 +28,7 @@
  * that project controls — an unsanitized one is a terminal-escape injection vector.
  */
 
-import { sanitizeInline } from "./sanitize.js";
+import { sanitizeInline, shortId } from "./sanitize.js";
 
 /** Canonical 36-char UUID (the id shape Synchain stores for every record). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,11 +79,16 @@ export async function resolveByPrefix<T extends { id: string }>(
   if (exact) return exact;
   const matches = all.filter((x) => x.id.startsWith(input));
   if (matches.length === 1) return matches[0]!;
+  // Echoed back sanitized, for the same reason the three messages in `resolveProjectRef` are:
+  // these travel to the terminal through each command's `console.error(pc.red(err.message))`,
+  // which does **not** go through `formatApiError` and so gets none of its sanitizing. `input`
+  // is argv (self-inflicted rather than cross-tenant), but two resolvers in one file disagreeing
+  // about whether their echoed input is safe is worse than either answer on its own.
   if (matches.length === 0) {
-    throw new Error(`No ${label} matches "${input}".`);
+    throw new Error(`No ${label} matches "${sanitizeInline(input)}".`);
   }
   throw new Error(
-    `${label} prefix "${input}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`
+    `${label} prefix "${sanitizeInline(input)}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`
   );
 }
 
@@ -165,7 +170,10 @@ function slugKeyOf(value: string | null | undefined): string | null {
  */
 export function projectRefLabel(p: ProjectRefRecord): string {
   const custom = p.customId?.trim();
-  return custom && custom.length > 0 ? custom : p.id.slice(0, 8);
+  // Both branches sanitize. Every caller happens to sanitize the result again today, but a
+  // function whose two branches disagree about whether its output is safe is the exact shape
+  // this file spent a release removing everywhere else.
+  return custom && custom.length > 0 ? sanitizeInline(custom) : shortId(p.id);
 }
 
 /**

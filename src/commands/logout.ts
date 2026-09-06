@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { clearConfig, loadConfig } from "../config.js";
 import { promptConfirm } from "../util/prompt.js";
+import { sanitizeInline } from "../util/sanitize.js";
 import { apiFetch } from "../api.js";
 import { userLabel, type MeResponse } from "./login.js";
 
@@ -27,7 +28,10 @@ export async function runLogout(flags?: { yes?: boolean }): Promise<void> {
   // not revoke the CLI key server-side (revoke that from Settings).
   const needConfirm = !flags?.yes && Boolean(process.stdin.isTTY);
   if (needConfirm) {
-    const ok = await promptConfirm(`Log out of ${who}?`, true);
+    // `who` is the signed-in user's own profile field, so self-inflicted rather than
+    // cross-tenant -- but it is the only server string in the CLI fed to a prompt rather than
+    // to console.*, which is exactly the kind of site a `grep console` sweep misses.
+    const ok = await promptConfirm(`Log out of ${sanitizeInline(who)}?`, true);
     if (!ok) {
       console.log("Cancelled.");
       return;

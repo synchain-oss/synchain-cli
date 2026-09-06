@@ -4,9 +4,9 @@ import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } f
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline, sanitizeBlock } from "../util/sanitize.js";
+import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
 
-// Discussion categories (see lib/discussion/types.ts).
+// Discussion categories POST /discussion accepts (see docs/reference.md#discussion).
 const CATEGORIES = ["mix", "master", "art", "release", "vocal", "general"] as const;
 type Category = (typeof CATEGORIES)[number];
 
@@ -58,10 +58,6 @@ export interface DiscussionFlags {
   json?: boolean;
   limit?: string;
   offset?: string;
-}
-
-function shortId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 async function readStdin(): Promise<string> {
@@ -124,8 +120,9 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
   lines.push(sanitizeBlock(root.content));
   lines.push("-----");
 
-  // 任意深度嵌套（撤销两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
-  // 导致无限递归（Web 两处 buildReplyTree/fetchProjectDiscussion 已各有防环）。
+  // Replies nest to any depth. `visited` guards against a `parentId` cycle in malformed data,
+  // which would otherwise recurse forever — the API imposes no depth limit, so the client
+  // cannot assume the tree is shallow or acyclic.
   const visited = new Set<string>();
   function walk(parent: DiscussionPost, depth: number): void {
     if (visited.has(parent.id)) return;
@@ -177,11 +174,30 @@ export function paginationFooter(
   total: number,
   limit: number
 ): string | null {
+  // These are declared `number`, but that is a compile-time claim: `apiFetch` is a bare
+  // `res.json() as T`, so `total` can arrive as a string carrying an escape sequence. Validate
+  // **before** the arithmetic -- `offset + 1` on a string is concatenation, so a check applied
+  // to the result would already be too late.
+  const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+  if (!finite(offset) || !finite(count) || !finite(total)) {
+    // Nothing meaningful to compute from a malformed page; show what arrived, sanitized,
+    // rather than printing arithmetic performed on it.
+    return `Showing ${safeNumber(count)} of ${safeNumber(total)} threads (pagination unavailable: malformed response)`;
+  }
   const hasNext = offset + count < total;
   if (offset === 0 && !hasNext) return null;
-  let line = `Showing ${offset + 1}–${offset + count} of ${total} threads`;
-  if (hasNext) line += ` · next page: --offset ${offset + limit}`;
-  return line;
+  const line = `Showing ${offset + 1}–${offset + count} of ${total} threads`;
+  // `limit` is checked separately because it feeds only the next-page hint. Folding it into the
+  // guard above would let a server that mangles just `limit` degrade an otherwise perfectly
+  // computable `Showing X–Y of N` into "malformed response" -- and on a single-page result,
+  // where this function returns null today, it would conjure a line out of nothing.
+  if (!hasNext) return line;
+  // The healthy half of this hint exists to be copied verbatim, so the degraded half must not
+  // keep the `--offset ` prefix: `--offset unavailable` reads as a runnable command and is not
+  // one -- commander rejects it. Say that more exists without offering a flag that cannot work.
+  return finite(limit)
+    ? `${line} · next page: --offset ${offset + limit}`
+    : `${line} · more results exist (page size unavailable; pass --offset yourself)`;
 }
 
 export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
@@ -199,7 +215,7 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
       if (res.offset > 0 && res.total > 0) {
         console.log(
           pc.dim(
-            `(no threads at offset ${res.offset} — ${res.total} total; use a smaller --offset)`
+            `(no threads at offset ${safeNumber(res.offset)} — ${safeNumber(res.total)} total; use a smaller --offset)`
           )
         );
       } else {
@@ -329,7 +345,7 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Created thread ${created.id}`));
+      console.log(pc.green(`Created thread ${sanitizeInline(created.id)}`));
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {
@@ -369,12 +385,12 @@ export async function runDiscussionReply(
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Replied to ${shortId(parentId)} (new post id: ${created.id}).`));
+      console.log(pc.green(`Replied to ${shortId(parentId)} (new post id: ${sanitizeInline(created.id)}).`));
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`Parent post ${parentPostId} not found.`));
+      console.error(pc.red(`Parent post ${sanitizeInline(parentPostId)} not found.`));
       process.exitCode = 1;
       return;
     }
