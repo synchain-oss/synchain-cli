@@ -45,7 +45,7 @@ jobs:
             ## 审查前先读(这些是本仓库的冻结契约,不是建议)
             - docs/reference.md                  公开命令参考(--json 形态、exit code 语义、ANSI 消毒)
             - docs/install-for-agents.md         面向 agent 的安装与免交互使用说明
-            - src/constants.ts                   CLI 输出契约的常量落点(C-FIX-16)
+            - src/constants.ts                   CLI 输出契约的常量落点
             - CLAUDE.md                          协作规范与本地 gates
             - CONTRIBUTING.md                    贡献规范与安全测试要求
             
