@@ -6,7 +6,14 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import mime from "mime-types";
 
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import {
+  apiFetch,
+  ApiError,
+  formatApiError,
+  formatErrorBody,
+  resolveActiveProject,
+  wantsJson,
+} from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { Progress } from "../util/progress.js";
@@ -274,7 +281,15 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     if (!putRes.ok) {
       const text = await putRes.text().catch(() => "");
       progress.finish(`upload failed: HTTP ${putRes.status}`);
-      console.error(pc.red(`Storage PUT failed: ${putRes.status} ${text}`));
+      // Same treatment as `formatApiError`, and for a slightly wider trust boundary: this body
+      // does not come from the configured API host at all, but from whatever host that API
+      // handed back in `upload.uploadUrl`. It bypasses `formatApiError`, so it needs the shared
+      // renderer explicitly -- sanitized, indented, and capped.
+      const body = formatErrorBody(text);
+      console.error(
+        pc.red(`Storage PUT failed: ${putRes.status}${body ? `
+  ${body}` : ""}`)
+      );
       process.exitCode = 1;
       return;
     }

@@ -4,6 +4,24 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+- **`folders ls` no longer lets a folder name drive your terminal.** `renderTree` built its own
+  lines instead of going through `renderTable`, so it never inherited that funnel's ANSI
+  stripping -- and neither did the `folders create` / `rm` / `rename` success lines. Folder names
+  are set by any member of the project, which made this the most reachable escape-injection point
+  in the CLI: no hostile server, no `--base-url`, nothing to get past. One member renames a
+  folder; the next person to run `folders ls` wears it. (`files ls` in the same file was always
+  safe, because it goes through `renderTable`.)
+- **`files upload` sanitizes the storage error body.** A failed storage `PUT` printed the remote
+  response verbatim, bypassing the sanitizing `formatApiError` gained in 0.7.0 -- and over a wider
+  trust boundary, since that body comes from whatever host the API returned in `uploadUrl`, not
+  from the configured API host.
+- **Error bodies are capped by line count as well as by characters.** The two bound different
+  things: characters keep stderr from flooding, lines keep the error's own first line from
+  scrolling out of view. 2000 characters of newlines is still ~666 lines.
+
 ## [0.7.0] - 2026-09-05
 
 Adds custom project IDs to `project use` / `project ls`.
