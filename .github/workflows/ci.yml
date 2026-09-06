@@ -29,10 +29,13 @@ jobs:
           - os: windows-latest          # CLI 有路径/文件名处理逻辑,必须验 Windows
             node: '20'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '${{ matrix.node }}', cache: npm }
-      - run: npm ci
+      # --ignore-scripts:本 workflow 在 fork PR 上照跑,而 npm ci 默认执行 PR 自带的
+      # lifecycle script(preinstall/prepare)与依赖的 install script = 任意代码执行。
+      # 本项目的构建(tsc)与测试(vitest)都不依赖 install script,实测去掉后全绿。
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck          # tsc --noEmit(覆盖测试文件)
       - run: npm run test -- --coverage # vitest run + 覆盖率阈值(见 vitest.config.mts)
       - run: npm run build              # tsc -p tsconfig.build.json → dist/
@@ -41,11 +44,12 @@ jobs:
   smoke:
     name: smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '20', cache: npm }
-      - run: npm ci && npm run build
+      - run: npm ci --ignore-scripts && npm run build   # --ignore-scripts 理由见 checks
       - name: Verify package contents
         run: npm pack --dry-run         # 确认 dist/ 与 bin 入口在包里、不误打包 src/__tests__
       - name: Smoke test built CLI
@@ -67,8 +71,9 @@ jobs:
   no-stale-refs:
     name: no-stale-refs
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
       - run: |
           bad=0
           for p in 'DLsnows/Synchain' 'UNLICENSED' 'docs/cli/'; do
@@ -91,45 +96,54 @@ jobs:
   audit:
     name: audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '20', cache: npm }
-      - run: npm ci
+      - run: npm ci --ignore-scripts    # --ignore-scripts 理由见 checks
       - run: npm audit --audit-level=high
 
-  # compliance:gitleaks + reuse lint(R3/J53)。steps 逐字取 06 §3.10。
+  # compliance:gitleaks(工作树)+ reuse lint(R3/J53)。
   # 不进 npm run gates 字符串;无 secrets → fork PR 同样跑。
   compliance:
     name: compliance
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Read pinned gitleaks version
-        id: ver
-        run: echo "v=$(tr -d '[:space:]' < .gitleaks-version)" >> "$GITHUB_OUTPUT"
-      - name: Install gitleaks (pinned)
-        run: |
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${{ steps.ver.outputs.v }}/gitleaks_${{ steps.ver.outputs.v }}_linux_x64.tar.gz" \
-            | tar -xz -C /usr/local/bin gitleaks
-          gitleaks version
-      - name: Secret scan
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: ./.github/actions/setup-gitleaks
+      - name: Secret scan (working tree)
         run: gitleaks detect --no-git --source . --redact -v --config .gitleaks.toml
       - name: REUSE lint
         run: pipx run reuse lint
 
-  # 聚合 job:required check 只挂这一个;needs 必须列全五项,否则其它 job 红了照样能 merge
+  # secret-history:全历史扫描。compliance 那条带 --no-git,只看工作树 —— 一条推上来
+  # 又被后续 commit 删掉的凭据,在那里是看不见的。两条覆盖面不同,都要有。
+  # 红了只代表历史里有命中,处置(登记 allowlist / 轮换凭据 / 改写历史)是人的判断,不在本 job 里做。
+  secret-history:
+    name: secret-history
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with: { fetch-depth: 0 }        # 默认浅克隆只有 1 个 commit,全历史扫描必须要完整 clone
+      - uses: ./.github/actions/setup-gitleaks
+      - name: Secret scan (full git history)
+        run: gitleaks detect --redact -v --config .gitleaks.toml
+
+  # 聚合 job:required check 只挂这一个;needs 必须列全其余各项,否则其它 job 红了照样能 merge
   cli-gate:
     name: cli-gate
-    needs: [checks, smoke, no-stale-refs, audit, compliance]
+    needs: [checks, smoke, no-stale-refs, audit, compliance, secret-history]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - run: |
           for r in "${{ needs.checks.result }}" "${{ needs.smoke.result }}" \
                    "${{ needs.no-stale-refs.result }}" "${{ needs.audit.result }}" \
-                   "${{ needs.compliance.result }}"; do
+                   "${{ needs.compliance.result }}" "${{ needs.secret-history.result }}"; do
             echo "result: $r"
             [ "$r" = "success" ] || exit 1
           done

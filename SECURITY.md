@@ -9,10 +9,12 @@
 
 ## Reporting a vulnerability
 
-**Do not open a public issue.** Use GitHub Private Vulnerability Reporting:
-Security → Report a vulnerability.
+**Do not open a public issue.** 私密上报有两条通道,任选其一:
 
-备用渠道:security@synchain.ca(仅用于 GitHub 通道不可用时的私下联系)。
+- **邮件(始终可用):** `contact@synchain.ca`,标题请带 `[security]`。
+- **GitHub Private Vulnerability Reporting:** Security → Report a vulnerability。
+  这个入口需要仓库侧显式开启 PVR 才存在;若 Security 标签页上没有
+  "Report a vulnerability" 按钮,说明尚未开启,请直接走邮件。
 
 ## Response targets
 

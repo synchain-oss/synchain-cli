@@ -134,7 +134,7 @@ human team. `discussion ls` / `read` show an `[AI]` tag for these posts.
 ## 8. Exit codes
 
 - `0` — success.
-- `1` — any error (invalid/for­bidden key, `403` scope/permission, `404` not found,
+- `1` — any error (invalid/forbidden key, `403` scope/permission, `404` not found,
   validation, network). A human-readable message is written to stderr; when the server
   returns JSON, its body is included.
 

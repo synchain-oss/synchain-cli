@@ -53,18 +53,17 @@ npm audit --audit-level=high
 
 | workflow | runner | 触发 | 说明 |
 | --- | --- | --- | --- |
-| `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
+| `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
 | `branch-gate` | `ubuntu-latest` | PR → dev | 分支命名 + DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
 | `claude-review` / `deepseek-review` | `ubuntu-latest` | same-repo PR | 二选一 enable(U8);fork PR 不跑 |
 | `pr-agent` | `ubuntu-latest` | same-repo PR | docker action,必须 latest;fork PR 不跑 |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
-| `publish` | `ubuntu-latest` | `workflow_dispatch` 手动 | CLI 不设 tag 自动发布 |
 
 成本纪律:runner 就低不就高;按量计费 bot 克制。
 
 ## 5. API 契约变更规范
 
-CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTTP API 契约。改动端点/字段/scope 语义 = breaking change,必须:① 先获用户明确批准;② 同步 `docs/reference.md` 与 `src/constants.ts`(冻结面)与 `docs/install-for-agents.md`;③ 记 CHANGELOG。鉴权基础设施(CLI key 生成、Bearer 校验、scope 判定)位于闭源主仓,本仓不得假设其实现。
+CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTTP API 契约。所有端点/字段/scope 语义以 `docs/reference.md`(公开命令参考)为准。改动端点/字段/scope 语义 = breaking change,必须:① 先获用户明确批准;② 同步 `docs/reference.md` 与 `src/constants.ts`(冻结面)与 `docs/install-for-agents.md`;③ 记 CHANGELOG。鉴权基础设施(CLI key 生成、Bearer 校验、scope 判定)位于闭源主仓,本仓不得假设其实现。
 
 ## 6. 环境与依赖
 
@@ -72,8 +71,8 @@ CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTT
 | --- | --- |
 | 运行时 | Node ≥ 20、npm |
 | 本地 gates | npm ci / typecheck / test --coverage / build / pack --dry-run / audit(§2) |
-| 合规扫描 | `gitleaks detect --no-git --redact --config .gitleaks.toml`(版本钉 .gitleaks-version)+ `pipx run reuse lint`(不进 npm run gates 字符串) |
-| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot);发布用 NPM_TOKEN |
+| 合规扫描 | 工作树:`gitleaks detect --no-git --redact --config .gitleaks.toml`;全历史:同命令去掉 `--no-git`(需完整 clone)。版本钉 .gitleaks-version。另 `pipx run reuse lint`。三条都不进 npm run gates 字符串 |
+| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot)。发布目前由维护者本地手工执行,不经 CI(仓内无 publish workflow) |
 | 为什么强调本地 | 子 PR 不触发完整 CI;npm audit 与覆盖率阈值是 CI 硬门禁,本地先过 |
 
 ## 7. 安全铁律
@@ -113,7 +112,3 @@ CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTT
 · src/ 整体 ≥ 80%
 · 交互式 prompts 与 process.exit 路径排除在 include 之外
 不达标 → CI 红,不得合并。
-
-## 9. API 契约规范
-
-CLI 与 Synchain 主应用之间没有任何代码级 import,只有一份运行时 HTTP API 契约。鉴权基础设施(CLI key 生成、Bearer 校验、scope 判定)位于闭源主仓,本仓不得假设其实现;所有端点/字段/scope 语义以 `docs/reference.md`(公开命令参考)为准,变更需与主仓同步并记 CHANGELOG。

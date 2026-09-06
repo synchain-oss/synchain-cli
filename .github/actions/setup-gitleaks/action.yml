@@ -1,0 +1,26 @@
+name: Setup gitleaks
+description: 安装 .gitleaks-version 钉住的那个 gitleaks 版本到 /usr/local/bin(仅 linux x64 runner)。
+
+# 本仓有两处扫描(工作树 / 全历史),安装步骤放这里而不是各写一遍 —— 版本校验只要有一份
+# 副本被漏改,漏掉的那份就是下面这条注入面的入口。
+runs:
+  using: composite
+  steps:
+    - name: Read and validate pinned version
+      shell: bash
+      run: |
+        v=$(tr -d '[:space:]' < .gitleaks-version)
+        # 这个串会被拼进下载 URL。.gitleaks-version 是仓库里的普通文件,fork PR 可以任意
+        # 改写它,所以先把格式卡死再用:只接受 x.y.z,`"` `$` 反引号 `;` 一概进不来。
+        printf '%s' "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+          || { echo "::error::.gitleaks-version 必须是 x.y.z,实际读到:$v"; exit 1; }
+        echo "GITLEAKS_VERSION=$v" >> "$GITHUB_ENV"
+
+    - name: Install gitleaks
+      shell: bash
+      run: |
+        # 版本经上一步校验后走 env 传入,不用 ${{ }} 拼进脚本文本
+        # ——${{ }} 是生成脚本时的字面替换,不是 shell 变量展开(同 branch-gate.yml 的写法)。
+        curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+          | tar -xz -C /usr/local/bin gitleaks
+        gitleaks version
