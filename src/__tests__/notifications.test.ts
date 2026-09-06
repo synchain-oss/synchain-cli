@@ -15,7 +15,7 @@ describe("relativeTime", () => {
     expect(relativeTime("2026-06-01T09:00:00.000Z", NOW)).toBe("3h ago");
     expect(relativeTime("2026-05-29T12:00:00.000Z", NOW)).toBe("3d ago");
   });
-  it("falls back to the raw string for an unparseable date", () => {
+  it("falls back to the (sanitized) input for an unparseable date", () => {
     expect(relativeTime("nope", NOW)).toBe("nope");
   });
 });
@@ -53,5 +53,16 @@ describe("formatNotificationLine", () => {
     expect(line.startsWith("•")).toBe(false);
     expect(line).toContain("Album X");
     expect(line).not.toContain(" · ");
+  });
+});
+
+describe("relativeTime fallback", () => {
+  it("sanitizes the raw ISO string it falls back to", () => {
+    // Date.parse failing means the server's own string is what gets returned. This function is
+    // exported, so its safety must not depend on what its one current caller happens to do --
+    // same contract as `formatLocal` in calendar.ts.
+    const out = relativeTime("not-a-date\u001b[31m");
+    expect(out).not.toContain("\u001b");
+    expect(out).toContain("not-a-date");
   });
 });

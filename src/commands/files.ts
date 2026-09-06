@@ -6,14 +6,21 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import mime from "mime-types";
 
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import {
+  apiFetch,
+  ApiError,
+  formatApiError,
+  withErrorBody,
+  resolveActiveProject,
+  wantsJson,
+} from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { Progress } from "../util/progress.js";
 import { promptConfirm } from "../util/prompt.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { assertSafeBaseUrl } from "../util/url.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 
 interface FileDTO {
   id: string;
@@ -56,13 +63,39 @@ export interface FilesFlags {
   yes?: boolean;
 }
 
-// Mirrors the server-side FILE_NAME_FORBIDDEN_RE (no path separators / control chars).
+// Mirrors the server's file-name rule (no path separators, no control chars). A local
+// pre-check for a clearer message only — the server validates independently and has the
+// final say.
 // eslint-disable-next-line no-control-regex
 const CLIENT_NAME_FORBIDDEN_RE = /[\\/\x00-\x1f\x7f]/;
 
 function extOf(name: string): string {
   const idx = name.lastIndexOf(".");
   return idx <= 0 ? "" : name.slice(idx + 1).toLowerCase();
+}
+
+/**
+ * The `files rename` extension-mismatch warning, or null when the extensions agree.
+ *
+ * `oldName` comes off the wire -- it is whatever a project member named the file -- and the
+ * extension is sliced straight out of it, so it needs sanitizing like every other server string.
+ * Two things made this the last unsanitized output on the "server string -> terminal" line:
+ * it writes through `process.stderr.write` rather than `console.*`, so a `grep console` sweep
+ * never sees it; and the local `CLIENT_NAME_FORBIDDEN_RE` looks like it already guards the name,
+ * while in fact it does not cover C1 (U+0080-U+009F) -- and U+009B *is* CSI to an xterm in 8-bit
+ * mode. A member names a file with one, anyone runs a rename that changes the extension, done.
+ *
+ * Extracted (not inlined) for the same reason as `folderLabel`: `src/commands` sits outside the
+ * coverage `include` and `commander.test.ts` mocks this module, so a sanitize call built inline
+ * here has no regression net at all.
+ */
+export function extensionWarning(oldName: string, newName: string): string | null {
+  const cur = extOf(oldName);
+  const nxt = extOf(newName);
+  if (cur === nxt) return null;
+  return cur
+    ? `Warning: extension differs (.${sanitizeInline(cur)} → ${nxt ? `.${sanitizeInline(nxt)}` : "(none)"}). Server may reject.`
+    : `Warning: original has no extension; new name does. Server may reject.`;
 }
 
 function formatBytes(n: number): string {
@@ -187,7 +220,7 @@ export async function runFilesLs(flags: FilesFlags): Promise<void> {
       return;
     }
     const rows = result.files.map((f) => ({
-      id: f.id.slice(0, 8),
+      id: shortId(f.id),
       name: f.name,
       size: formatBytes(f.size),
       mime: f.mimeType,
@@ -221,7 +254,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     const absPath = path.resolve(localPath);
     const stat = await fs.stat(absPath);
     if (!stat.isFile()) {
-      console.error(pc.red(`Not a regular file: ${absPath}`));
+      console.error(pc.red(`Not a regular file: ${sanitizeInline(absPath)}`));
       process.exitCode = 1;
       return;
     }
@@ -229,7 +262,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     // pre-check here so an empty placeholder file gets a message that says why.
     if (stat.size === 0) {
       console.error(
-        pc.red(`Cannot upload an empty (0-byte) file: ${absPath} — empty files aren't supported.`)
+        pc.red(`Cannot upload an empty (0-byte) file: ${sanitizeInline(absPath)} — empty files aren't supported.`)
       );
       process.exitCode = 1;
       return;
@@ -253,7 +286,13 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
 
     // 2. PUT the file body to the presigned URL. The Content-Type MUST match the
     //    `type` the URL was signed with, or R2 rejects the PUT.
-    const progress = new Progress({ total: stat.size, label: `uploading ${fileName}` });
+    // Sanitized like the completion line 29 lines below -- and more urgently: `Progress.render`
+    // writes the label behind a carriage return on every tick, so it is already part of a
+    // redraw loop -- an escape here rides that loop rather than printing once.
+    const progress = new Progress({
+      total: stat.size,
+      label: `uploading ${sanitizeInline(fileName)}`,
+    });
     const guard = stallGuard(60_000, "upload");
     const fileStream = createReadStream(absPath);
     fileStream.on("data", (chunk) => {
@@ -274,11 +313,15 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     if (!putRes.ok) {
       const text = await putRes.text().catch(() => "");
       progress.finish(`upload failed: HTTP ${putRes.status}`);
-      console.error(pc.red(`Storage PUT failed: ${putRes.status} ${text}`));
+      // Same treatment as `formatApiError`, and for a slightly wider trust boundary: this body
+      // does not come from the configured API host at all, but from whatever host that API
+      // handed back in `upload.uploadUrl`. It bypasses `formatApiError`, so it needs the shared
+      // renderer explicitly -- sanitized, indented, and capped.
+      console.error(pc.red(withErrorBody(`Storage PUT failed: ${putRes.status}`, text)));
       process.exitCode = 1;
       return;
     }
-    progress.finish(`uploaded ${fileName} (${formatBytes(stat.size)})`);
+    progress.finish(`uploaded ${sanitizeInline(fileName)} (${formatBytes(stat.size)})`);
 
     // 3. Register the object as a file row. Note the field rename key → storageKey.
     let created: CreateFileResponse;
@@ -303,7 +346,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       // reclaimed by server-side cleanup — then let the outer handler print the error.
       process.stderr.write(
         pc.yellow(
-          `\nNote: the bytes were uploaded to storage (key: ${upload.key}) but registering the file ` +
+          `\nNote: the bytes were uploaded to storage (key: ${sanitizeInline(upload.key)}) but registering the file ` +
             `record failed. Retrying re-uploads the bytes; the orphaned object is reclaimed server-side.\n`
         )
       );
@@ -313,7 +356,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Created file ${created.file.id}`));
+      console.log(pc.green(`Created file ${sanitizeInline(created.file.id)}`));
     }
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
@@ -409,7 +452,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       // Defense-in-depth: the derived target must not escape the working dir.
       const cwd = process.cwd();
       if (absOut !== cwd && !absOut.startsWith(cwd + path.sep)) {
-        throw new Error(`Refusing to write outside the working directory: ${absOut}`);
+        throw new Error(`Refusing to write outside the working directory: ${sanitizeInline(absOut)}`);
       }
       // Never silently overwrite an existing local file with a server-derived name.
       absOut = await nextAvailablePath(absOut);
@@ -440,7 +483,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       const writeStream = createWriteStream(absOut!);
       await pipeline(nodeStream, writeStream);
       guard.clear();
-      progress.finish(`downloaded to ${absOut}`);
+      progress.finish(`downloaded to ${sanitizeInline(absOut)}`);
     }
   } catch (err) {
     if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
@@ -474,7 +517,7 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
     } else {
       console.log(
         pc.green(
-          `Moved ${sanitizeInline(resolved.name)} to ${folderId === null ? "root" : folderId}.`
+          `Moved ${sanitizeInline(resolved.name)} to ${folderId === null ? "root" : sanitizeInline(folderId)}.`
         )
       );
     }
@@ -516,7 +559,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
     // 2. Confirm (skipped with --yes for non-interactive use).
     if (!flags.yes) {
       const ok = await promptConfirm(
-        `Delete ${sanitizeInline(resolved.name)} (${resolved.id.slice(0, 8)})?`,
+        `Delete ${sanitizeInline(resolved.name)} (${shortId(resolved.id)})?`,
         false
       );
       if (!ok) {
@@ -530,7 +573,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${resolved.id.slice(0, 8)}).`));
+    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
     process.exitCode = 1;
@@ -578,14 +621,8 @@ export async function runFilesRename(
     }
 
     // Extension sanity check (warn only — the server's 422 is the source of truth).
-    if (extOf(resolved.name) !== extOf(newName)) {
-      const cur = extOf(resolved.name);
-      const nxt = extOf(newName);
-      const note = cur
-        ? `Warning: extension differs (.${cur} → ${nxt ? `.${nxt}` : "(none)"}). Server may reject.`
-        : `Warning: original has no extension; new name does. Server may reject.`;
-      process.stderr.write(pc.yellow(`${note}\n`));
-    }
+    const note = extensionWarning(resolved.name, newName);
+    if (note) process.stderr.write(pc.yellow(`${note}\n`));
 
     try {
       const result = await apiFetch<{ file: FileDTO }>(
@@ -598,7 +635,7 @@ export async function runFilesRename(
       }
       console.log(
         pc.green(
-          `Renamed ${sanitizeInline(resolved.name)} → ${sanitizeInline(result.file.name)} (id: ${resolved.id.slice(0, 8)}).`
+          `Renamed ${sanitizeInline(resolved.name)} → ${sanitizeInline(result.file.name)} (id: ${shortId(resolved.id)}).`
         )
       );
     } catch (err) {
@@ -610,7 +647,7 @@ export async function runFilesRename(
         return;
       }
       if (err instanceof ApiError && err.status === 404) {
-        console.error(pc.red(`File ${resolved.id} not found.`));
+        console.error(pc.red(`File ${sanitizeInline(resolved.id)} not found.`));
         process.exitCode = 1;
         return;
       }

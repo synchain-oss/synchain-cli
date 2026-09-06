@@ -3,7 +3,7 @@ import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId, safeNumber } from "../util/sanitize.js";
 
 /** A notification view-model as served by GET /api/user/notifications. */
 export interface NotificationItem {
@@ -30,10 +30,18 @@ export interface NotificationsFlags {
   json?: boolean;
 }
 
-/** Compact "2h ago"-style relative time. Exported for tests. */
+/**
+ * Compact "2h ago"-style relative time. Exported for tests.
+ *
+ * The unparseable branch returns the server's raw string, so it sanitizes **inside the
+ * function** rather than leaning on the caller -- same contract as `formatLocal` in
+ * `calendar.ts`. A function that is exported and whose safety depends on what its one current
+ * caller happens to do is a trap for the second caller: they would have to re-derive this
+ * reasoning, or silently not.
+ */
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
+  if (Number.isNaN(t)) return sanitizeInline(iso);
   const s = Math.max(0, Math.floor((now - t) / 1000));
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
@@ -56,8 +64,10 @@ export function formatNotificationLine(n: NotificationItem, now?: number): strin
     .filter((p): p is string => Boolean(p))
     .map((p) => sanitizeInline(p));
   const marker = n.isRead ? " " : "•";
+  // `relativeTime` sanitizes its own unparseable-date fallback, so no second pass here --
+  // one owner per value, same as every other field on this line.
   const when = relativeTime(n.createdAt, now).padEnd(7);
-  return `${marker} ${n.id}  ${when}  [${n.type}] ${parts.join(" · ")}`;
+  return `${marker} ${sanitizeInline(n.id)}  ${when}  [${sanitizeInline(n.type)}] ${parts.join(" · ")}`;
 }
 
 export async function runNotificationsLs(flags: NotificationsFlags): Promise<void> {
@@ -78,7 +88,7 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     } else {
       for (const n of res.items) console.log(formatNotificationLine(n));
     }
-    console.log(pc.dim(`${res.unreadCount} unread`));
+    console.log(pc.dim(`${safeNumber(res.unreadCount)} unread`));
   } catch (err) {
     console.error(pc.red(formatApiError(err)));
     process.exitCode = 1;
@@ -108,8 +118,14 @@ export async function runNotificationsRead(
       if (wantsJson(flags)) {
         console.log(JSON.stringify(res, null, 2));
       } else {
+        // Pluralize off **what is actually printed**, not off the raw field. `safeNumber`
+        // returns a string when the value is not a real number, so comparing it to `1` is
+        // always false -- a server sending the string "1" would render "Marked 1
+        // notifications read." Comparing the rendered form makes the grammar agree with the
+        // digit the reader sees, whatever the field turned out to be.
+        const shown = String(safeNumber(res.updated));
         console.log(
-          pc.green(`Marked ${res.updated} notification${res.updated === 1 ? "" : "s"} read.`)
+          pc.green(`Marked ${shown} notification${shown === "1" ? "" : "s"} read.`)
         );
       }
       return;
@@ -129,9 +145,9 @@ export async function runNotificationsRead(
     if (wantsJson(flags)) {
       console.log(JSON.stringify(res, null, 2));
     } else if (res.updated > 0) {
-      console.log(pc.green(`Marked ${resolvedId.slice(0, 8)} read.`));
+      console.log(pc.green(`Marked ${shortId(resolvedId)} read.`));
     } else {
-      console.log(pc.dim(`${resolvedId.slice(0, 8)} was already read (or not found).`));
+      console.log(pc.dim(`${shortId(resolvedId)} was already read (or not found).`));
     }
   } catch (err) {
     if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {
