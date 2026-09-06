@@ -192,16 +192,6 @@ export function formatErrorBody(raw: unknown): string {
 }
 
 /**
- * Pretty-prints an ApiError (or any error) for console output.
- *
- * The body goes through {@link formatErrorBody}; see there for why that matters. `err.url` needs
- * no sanitizing for the cross-tenant case: every id interpolated into a path goes through
- * `encodeURIComponent`, which turns an ESC into `%1B`. It is not escape-proof in general —
- * `joinUrl` concatenates the raw `--base-url` string, and `assertSafeBaseUrl` parses it without
- * writing the parsed form back — but that content comes from the user's own argv, so it is
- * self-inflicted rather than attacker-supplied.
- */
-/**
  * A headline with an error body rendered under it, or the headline alone when there is none.
  *
  * One owner for this composition. It was briefly hand-replicated at the storage-PUT call site in
@@ -214,6 +204,16 @@ export function withErrorBody(headline: string, raw: unknown): string {
   return body ? `${headline}\n  ${body}` : headline;
 }
 
+/**
+ * Pretty-prints an ApiError (or any error) for console output.
+ *
+ * The body goes through {@link formatErrorBody} via {@link withErrorBody}; see there for why
+ * that matters. `err.url` needs no sanitizing for the cross-tenant case: every id interpolated
+ * into a path goes through `encodeURIComponent`, which turns an ESC into `%1B`. It is not
+ * escape-proof in general — `joinUrl` concatenates the raw `--base-url` string, and
+ * `assertSafeBaseUrl` parses it without writing the parsed form back — but that content comes
+ * from the user's own argv, so it is self-inflicted rather than attacker-supplied.
+ */
 export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
     return withErrorBody(`API error ${err.status} ${err.url}`, err.body);

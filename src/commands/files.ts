@@ -260,7 +260,13 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
 
     // 2. PUT the file body to the presigned URL. The Content-Type MUST match the
     //    `type` the URL was signed with, or R2 rejects the PUT.
-    const progress = new Progress({ total: stat.size, label: `uploading ${fileName}` });
+    // Sanitized like the completion line 29 lines below -- and more urgently: `Progress.render`
+    // writes the label behind a carriage return on every tick, so it is already part of a
+    // redraw loop -- an escape here rides that loop rather than printing once.
+    const progress = new Progress({
+      total: stat.size,
+      label: `uploading ${sanitizeInline(fileName)}`,
+    });
     const guard = stallGuard(60_000, "upload");
     const fileStream = createReadStream(absPath);
     fileStream.on("data", (chunk) => {
