@@ -18,8 +18,25 @@
 
 ## runner 版本
 
-所有 workflow 目前固定 `runs-on: ubuntu-latest`,不钉具体镜像版本。是否改为钉版本待定,
-口径参见内部规划文档。
+所有 workflow 固定 `runs-on: ubuntu-latest`,不钉具体镜像版本(如 `ubuntu-24.04`)。
+
+理由:本仓的 job 只有 Node 构建/测试与 shell 断言,没有对镜像版本敏感的步骤 —— 钉版本
+买不到可复现性上的多少东西,却要跟着 runner image 的弃用节奏定期手工升级,单人维护下
+这份成本大于收益。滚动更新至今没有咬过本仓。
+
+这条是当前口径,不是定论;真要改钉版本,先参见内部规划文档。需要复现某次跑的环境时,
+run 日志顶部记着当次的镜像版本。
+
+## 与其他仓库保持一致的两处
+
+下面两处在维护者的其他仓库里有逐字相同的副本,改动需要同步过去(不同步不会有任何东西
+变红,所以只能靠这条记着):
+
+- `CLAUDE.md` §0 安全铁律 —— 整节。
+- `.github/workflows/branch-gate.yml` 的 `branch-gate` job。
+
+**已知漂移**:清理内部编号的那次改写动了 `CLAUDE.md` §0 第 4、5 条与 `branch-gate.yml`
+的几条注释,还没有同步到其他副本。
 
 ## `scripts/check-readme-parity.ps1` 的双文件模式
 

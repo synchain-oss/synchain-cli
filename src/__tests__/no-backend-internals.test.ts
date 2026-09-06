@@ -12,8 +12,10 @@ import * as path from "node:path";
  * anyone who reads this repo.
  *
  * The distinction is easy to lose in a comment written while looking at both codebases at once.
- * Five such comments had accumulated by 2026-09-06, and every one of them read as helpful
+ * A batch of such comments had accumulated by 2026-09-06, and every one of them read as helpful
  * context at the time it was written. This test is the part that does not depend on remembering.
+ * (No count here on purpose: a number would need updating every time another one is found, and
+ * a doc comment nobody re-reads is exactly where a stale number survives.)
  *
  * ## What this guards, exactly
  *

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   branch-gate:
     name: branch-gate                   # required check context,永不改名,永不加 if:
-    runs-on: ubuntu-latest              # 固定用 latest,不钉具体镜像版本(口径见 docs/MAINTAINERS.md)
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Check source branch
