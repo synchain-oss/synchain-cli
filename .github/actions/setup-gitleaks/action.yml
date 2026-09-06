@@ -19,8 +19,9 @@ runs:
     - name: Install gitleaks
       shell: bash
       run: |
-        # 版本经上一步校验后走 env 传入,不用 ${{ }} 拼进脚本文本
-        # ——${{ }} 是生成脚本时的字面替换,不是 shell 变量展开(同 branch-gate.yml 的写法)。
+        # 版本经上一步校验后走 env 传入,不拿 GitHub 表达式插值去拼脚本文本
+        # ——那种插值是生成脚本时的字面替换,不是 shell 变量展开(同 branch-gate.yml 的写法)。
+        # (注:表达式的两个花括号连写在 run: 里会被真的当成表达式解析,注释里也不能写。)
         curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
           | tar -xz -C /usr/local/bin gitleaks
         gitleaks version
