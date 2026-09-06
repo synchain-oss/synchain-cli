@@ -177,17 +177,23 @@ export function paginationFooter(
   // `res.json() as T`, so `total` can arrive as a string carrying an escape sequence. Validate
   // **before** the arithmetic -- `offset + 1` on a string is concatenation, so a check applied
   // to the result would already be too late.
-  const ok = [offset, count, total, limit].every((n) => typeof n === "number" && Number.isFinite(n));
-  if (!ok) {
+  const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+  if (!finite(offset) || !finite(count) || !finite(total)) {
     // Nothing meaningful to compute from a malformed page; show what arrived, sanitized,
     // rather than printing arithmetic performed on it.
     return `Showing ${safeNumber(count)} of ${safeNumber(total)} threads (pagination unavailable: malformed response)`;
   }
   const hasNext = offset + count < total;
   if (offset === 0 && !hasNext) return null;
-  let line = `Showing ${offset + 1}–${offset + count} of ${total} threads`;
-  if (hasNext) line += ` · next page: --offset ${offset + limit}`;
-  return line;
+  const line = `Showing ${offset + 1}–${offset + count} of ${total} threads`;
+  // `limit` is checked separately because it feeds only the next-page hint. Folding it into the
+  // guard above would let a server that mangles just `limit` degrade an otherwise perfectly
+  // computable `Showing X–Y of N` into "malformed response" -- and on a single-page result,
+  // where this function returns null today, it would conjure a line out of nothing.
+  if (!hasNext) return line;
+  return finite(limit)
+    ? `${line} · next page: --offset ${offset + limit}`
+    : `${line} · next page: --offset unavailable (malformed page size)`;
 }
 
 export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
@@ -380,7 +386,7 @@ export async function runDiscussionReply(
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`Parent post ${parentPostId} not found.`));
+      console.error(pc.red(`Parent post ${sanitizeInline(parentPostId)} not found.`));
       process.exitCode = 1;
       return;
     }
