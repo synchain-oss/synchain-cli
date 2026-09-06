@@ -6,7 +6,8 @@ import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
 
-// Synchain schedule tags (see lib/calendar/schedule-api.ts eventInputSchema).
+// Schedule tags the calendar API accepts (see docs/reference.md#calendar). The server has
+// the final say; this list only powers argv validation and the --help text.
 const TAGS = [
   "meeting",
   "mix",

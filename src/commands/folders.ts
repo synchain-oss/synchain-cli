@@ -6,7 +6,8 @@ import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
 import { resolveByPrefix } from "../util/resolve-id.js";
 
-// Mirrors the server-side FILE_NAME_FORBIDDEN_RE.
+// Mirrors the server's file-name rule (no path separators, no control chars); the server
+// validates independently and has the final say.
 // eslint-disable-next-line no-control-regex
 const FOLDER_NAME_FORBIDDEN_RE = /[\\/\x00-\x1f\x7f]/;
 

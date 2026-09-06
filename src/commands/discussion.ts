@@ -6,7 +6,7 @@ import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
 
-// Discussion categories (see lib/discussion/types.ts).
+// Discussion categories POST /discussion accepts (see docs/reference.md#discussion).
 const CATEGORIES = ["mix", "master", "art", "release", "vocal", "general"] as const;
 type Category = (typeof CATEGORIES)[number];
 
@@ -120,8 +120,9 @@ export function renderThread(root: DiscussionPost, all: DiscussionPost[]): strin
   lines.push(sanitizeBlock(root.content));
   lines.push("-----");
 
-  // 任意深度嵌套（撤销两级限制后线程可深于 2 层）；visited 防脏数据里的 parent_id 环
-  // 导致无限递归（Web 两处 buildReplyTree/fetchProjectDiscussion 已各有防环）。
+  // Replies nest to any depth. `visited` guards against a `parentId` cycle in malformed data,
+  // which would otherwise recurse forever — the API imposes no depth limit, so the client
+  // cannot assume the tree is shallow or acyclic.
   const visited = new Set<string>();
   function walk(parent: DiscussionPost, depth: number): void {
     if (visited.has(parent.id)) return;

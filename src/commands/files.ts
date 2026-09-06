@@ -63,7 +63,9 @@ export interface FilesFlags {
   yes?: boolean;
 }
 
-// Mirrors the server-side FILE_NAME_FORBIDDEN_RE (no path separators / control chars).
+// Mirrors the server's file-name rule (no path separators, no control chars). A local
+// pre-check for a clearer message only — the server validates independently and has the
+// final say.
 // eslint-disable-next-line no-control-regex
 const CLIENT_NAME_FORBIDDEN_RE = /[\\/\x00-\x1f\x7f]/;
 
