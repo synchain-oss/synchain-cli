@@ -17,7 +17,7 @@ issue/PR 接受中文或英文;维护者内部沟通用中文。
 ## 3. 分支模型
 
 - 内部:主支线 `feature/extraction`,子支线 `feat/<TASK-ID>-<slug>`;子 PR base = `feature/extraction`。
-- 外部贡献者:fork → 任意分支名(请不要用 `dev`/`stage`/`prod`/`feature/v1`/`feature/extraction`)→ PR 到 `dev`。维护者会手工加 `external` label 并人工 review;自动化 review 只在维护者分支上运行,首次响应可能较慢。大改动请先开 issue 讨论。
+- 外部贡献者(仓库转为公开、Allow forking 打开后):fork → 任意分支名(请不要用 `dev`/`stage`/`prod`/`feature/v1`/`feature/extraction`)→ PR 到 `dev`。维护者会手工加 `external` label 并人工 review;自动化 review 只在维护者分支上运行,首次响应可能较慢。大改动请先开 issue 讨论。
 
 ## 4. Commit 规范
 
@@ -55,3 +55,8 @@ npm audit --audit-level=high
 ## 9. 发布流程(仅维护者)
 
 见 `docs/reference.md` 的「Publishing (maintainers)」一节;版本号在 `package.json`。
+
+## 10. 仓库设置(仅维护者)
+
+公开仓库应当保持的 GitHub 设置(分支保护、secret scanning、fork PR 审批等)见
+[docs/PUBLIC_LAUNCH_SETTINGS.md](./docs/PUBLIC_LAUNCH_SETTINGS.md)。
