@@ -1,4 +1,4 @@
-# 生成物与第三方压缩产物 —— CI 与本地 `prettier --check .` 的范围收敛全靠本文件(06 §3.3)
+# 生成物与第三方压缩产物 —— CI 与本地 `prettier --check .` 的范围收敛全靠本文件
 dist/
 node_modules/
 *.min.js

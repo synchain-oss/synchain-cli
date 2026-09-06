@@ -2,8 +2,8 @@ name: Branch Gate
 
 # 晋升链(v1 只有 dev 一条长期分支):
 #   feat/* | feature/*  ->  dev            (same-repo)
-#   任意分支名(除长期分支名) -> dev        (fork,J31/J41)
-# 子 PR(base=feature/*)故意不受此门禁约束(D2)。
+#   任意分支名(除长期分支名) -> dev        (fork PR)
+# 子 PR(base=feature/*)故意不受此门禁约束。
 # 发版里程碑再打开下面被注释的 prod/stage 规则。
 
 on:
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   branch-gate:
     name: branch-gate                   # required check context,永不改名,永不加 if:
-    runs-on: ubuntu-latest              # [R3] V-4 确认前一律 latest(§3.0 口径注);三仓 branch-gate 逐字取本节
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Check source branch
@@ -36,13 +36,13 @@ jobs:
           # ① 机器人 PR 先放行命名规则:dependabot 的 head 形如
           #    dependabot/github_actions/actions-checkout-5,永远不匹配 feat/*|feature/*。
           #    不放行的话每条依赖升级 PR 都会被 required check 红叉,只能靠 admin bypass
-          #    ——12 §6.3 的整套依赖更新策略会在开源第一个月瘫痪。
+          #    ——那样整套依赖更新策略会在开源第一个月瘫痪。
           #    注意:dependabot 分支本就是同仓分支,这条不放松任何 fork 判定。
           if [ "$ACTOR" = "dependabot[bot]" ]; then
             echo "bot PR ($ACTOR): skip branch naming rule"; exit 0
           fi
 
-          # ② fork PR(J31/J41):允许,但不得用长期分支名伪装晋升;不强制 feat/*|feature/* 命名。
+          # ② fork PR:允许,但不得用长期分支名伪装晋升;不强制 feat/*|feature/* 命名。
           if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
             case "$HEAD" in
               dev|stage|prod|feature/v1|feature/extraction)
@@ -66,7 +66,7 @@ jobs:
           # if [ "$BASE" = "stage" ] && [ "$HEAD" != "dev" ]; then ... fi
           echo "Branch gate passed: '$HEAD' -> '$BASE'"
 
-      # DCO —— 12 §1.4 把 Signed-off-by 定为贡献前提,而 PR 模板里的勾选框是纯自觉。
+      # DCO —— 本项目把 Signed-off-by 定为贡献前提(CONTRIBUTING.md §2),而 PR 模板里的勾选框是纯自觉。
       # DCO 是本项目唯一的入站许可证凭据(不采用 CLA),在 GPLv3 + 可能追加 §7 例外的场景下,
       # 一条无 sign-off 的外部 commit 就会让后续修改例外条款必须逐一联系贡献者。
       # 用内联 gh api 实现,不引第三方 action(org 的 allowed_actions 是白名单,第三方 DCO action 会被拦)。
@@ -84,9 +84,9 @@ jobs:
           fi
           echo "DCO ok"
 
-      # 冻结契约 path guard —— CODEOWNERS 在本项目的分支保护下只有"自动 request review"的装饰作用
-      # (§7.2 把 required_pull_request_reviews 设为 null,理由见该节),所以冻结文档需要一条
-      # 真正机器可验的守卫,与 §3.2 的三条 golden 测试互补。
+      # 冻结契约 path guard —— 本项目的分支保护不要求 review approval(单人维护时要求 ≥ 1
+      # 会让维护者无法批准自己的 PR),CODEOWNERS 因此只剩"自动 request review"的装饰作用,
+      # 所以冻结文档需要一条真正机器可验的守卫。
       - name: Frozen-contract change guard
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

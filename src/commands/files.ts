@@ -258,7 +258,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       process.exitCode = 1;
       return;
     }
-    // The server's upload-url schema rejects size=0 with an opaque "invalid_query";
+    // The server's upload-url validation rejects size=0 with an opaque "invalid_query";
     // pre-check here so an empty placeholder file gets a message that says why.
     if (stat.size === 0) {
       console.error(
@@ -285,7 +285,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     );
 
     // 2. PUT the file body to the presigned URL. The Content-Type MUST match the
-    //    `type` the URL was signed with, or R2 rejects the PUT.
+    //    `type` the URL was signed with, or the storage endpoint rejects the PUT.
     // Sanitized like the completion line 29 lines below -- and more urgently: `Progress.render`
     // writes the label behind a carriage return on every tick, so it is already part of a
     // redraw loop -- an escape here rides that loop rather than printing once.
@@ -340,7 +340,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
         }
       );
     } catch (err) {
-      // The bytes reached R2 but the file row wasn't created (network drop, write
+      // The bytes reached storage but the file row wasn't created (network drop, write
       // scope revoked mid-flight, folder deleted, …). Surface the orphaned key so
       // the user understands a retry re-uploads the bytes and the stray object is
       // reclaimed by server-side cleanup — then let the outer handler print the error.
@@ -402,10 +402,10 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       fallbackName = resolved.name;
     }
     const baseUrl = cfg?.baseUrl ?? DEFAULT_BASE_URL;
-    // This path bypasses apiFetch (raw fetch to follow the 302 → R2), so guard
+    // This path bypasses apiFetch (raw fetch to follow the 302 to storage), so guard
     // the base URL here too — never send the bearer over cleartext http.
     assertSafeBaseUrl(baseUrl);
-    // The endpoint 302-redirects to a short-lived presigned R2 URL; fetch follows.
+    // The endpoint 302-redirects to a short-lived presigned storage URL; fetch follows.
     const url = `${baseUrl.replace(/\/+$/, "")}/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(downloadId)}`;
     const headers: Record<string, string> = {};
     if (cfg?.token) headers["Authorization"] = `Bearer ${cfg.token}`;
@@ -568,7 +568,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       }
     }
 
-    // 3. DELETE the file (server removes the R2 object then the row).
+    // 3. DELETE the file (server removes the stored object then the row).
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }

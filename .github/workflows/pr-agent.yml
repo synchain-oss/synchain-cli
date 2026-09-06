@@ -2,8 +2,8 @@ name: PR Agent
 
 # Qodo PR-Agent —— DeepSeek,按量计费(三个 review bot 里唯一"每次 push 必跑"的一个)。
 # 容器化(Docker container)action:slim runner 无 docker daemon,build 阶段会在 /var/run/docker.sock 上失败。
-# fork PR 一律不跑(J31):pull_request 事件不向 fork 下发 secrets。
-# 成本提醒(U8):v1 建议先 gh workflow disable,等观察到 claude-review 的盲区再开。
+# fork PR 一律不跑:pull_request 事件不向 fork 下发 secrets。
+# 成本提醒:建议先 gh workflow disable,等观察到 claude-review 的盲区再开。
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest            # 容器 action,slim 无 docker daemon 会挂
     timeout-minutes: 30
     permissions:
-      contents: read                  # checkout 需要读权限拉取 PR merge ref(C05 实测补:O04 模板漏了 read)
+      contents: read                  # checkout 需要读权限拉取 PR merge ref
       issues: write                   # 故意不给 contents: write —— 收窄爆炸半径
       pull-requests: write
     steps:

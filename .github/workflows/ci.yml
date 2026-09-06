@@ -12,10 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read          # 本 workflow 不读任何 secrets → fork PR 可安全运行(J31)
+  contents: read          # 本 workflow 不读任何 secrets → fork PR 可安全运行
 
 jobs:
-  # 矩阵 = 三格(07 C04 交付物字段为准):ubuntu-latest × node 20/22 + windows-latest × node 20
+  # 矩阵 = 三格:ubuntu-latest × node 20/22 + windows-latest × node 20
   checks:
     name: checks (node ${{ matrix.node }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -64,7 +64,7 @@ jobs:
           ! grep -q 'DLsnows' /tmp/h1.txt
           ! grep -q 'DLsnows' /tmp/h2.txt
 
-  # no-stale-refs:09 §2.2 四条 grep,作为持续约束
+  # no-stale-refs:抽取期遗留引用的四条 grep,作为持续约束
   # 四条例外:
   #   ① CHANGELOG.md 排除(其职责就是叙述历史,必然出现旧串)
   #   ② cd cli 用行首锚定 ^[[:space:]]*cd cli\b(只命中命令行,不误伤散文)
@@ -95,7 +95,7 @@ jobs:
           fi
           exit $bad
 
-  # audit:供应链门禁(12 §2.4 硬约束),单独成 job,但必须进 cli-gate.needs
+  # audit:供应链门禁,单独成 job,但必须进 cli-gate.needs
   audit:
     name: audit
     runs-on: ubuntu-latest
@@ -107,7 +107,7 @@ jobs:
       - run: npm ci --ignore-scripts    # --ignore-scripts 理由见 checks
       - run: npm audit --audit-level=high
 
-  # compliance:gitleaks(工作树)+ reuse lint(R3/J53)。
+  # compliance:gitleaks(工作树)+ reuse lint。
   # 不进 npm run gates 字符串;无 secrets → fork PR 同样跑。
   compliance:
     name: compliance

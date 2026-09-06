@@ -1,6 +1,6 @@
 version = 1
 
-# ① 兜底(必须放最前;后匹配者优先)。本仓 SPDX = MIT(CLI 是 MIT 单许可仓,12 §1.3)。
+# ① 兜底(必须放最前;后匹配者优先)。本仓 SPDX = MIT(CLI 是 MIT 单许可仓)。
 [[annotations]]
 path = "**"
 SPDX-FileCopyrightText = "2026 Synchain"

@@ -1,9 +1,9 @@
 name: Claude PR Review
 
 # Claude 代码审查,走用户订阅 OAuth token(非按量计费 API key)。
-# 触发所有 base 分支 —— 子 PR(base=feature/*)恰恰只有 review bot 会跑(D2)。
-# fork PR 一律不跑(J31):pull_request 事件不向 fork 下发 secrets,bot 既拿不到 token 也没有写权限;
-# 外部 PR 的 AI 审查由维护者本地拉分支跑,禁止用 pull_request_target 供密(J20)。
+# 触发所有 base 分支 —— 子 PR(base=feature/*)恰恰只有 review bot 会跑。
+# fork PR 一律不跑:pull_request 事件不向 fork 下发 secrets,bot 既拿不到 token 也没有写权限;
+# 外部 PR 的 AI 审查由维护者本地拉分支跑,禁止用 pull_request_target 供密(CLAUDE.md §0 第 4 条)。
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -18,7 +18,7 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest             # [R3] V-4 确认前一律 latest(§3.0 口径注)
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -45,7 +45,7 @@ jobs:
             ## 审查前先读(这些是本仓库的冻结契约,不是建议)
             - docs/reference.md                  公开命令参考(--json 形态、exit code 语义、ANSI 消毒)
             - docs/install-for-agents.md         面向 agent 的安装与免交互使用说明
-            - src/constants.ts                   CLI 输出契约的常量落点(C-FIX-16)
+            - src/constants.ts                   CLI 输出契约的常量落点
             - CLAUDE.md                          协作规范与本地 gates
             - CONTRIBUTING.md                    贡献规范与安全测试要求
             
