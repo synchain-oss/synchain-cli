@@ -15,7 +15,7 @@ describe("relativeTime", () => {
     expect(relativeTime("2026-06-01T09:00:00.000Z", NOW)).toBe("3h ago");
     expect(relativeTime("2026-05-29T12:00:00.000Z", NOW)).toBe("3d ago");
   });
-  it("falls back to the raw string for an unparseable date", () => {
+  it("falls back to the (sanitized) input for an unparseable date", () => {
     expect(relativeTime("nope", NOW)).toBe("nope");
   });
 });

@@ -64,9 +64,9 @@ export function formatNotificationLine(n: NotificationItem, now?: number): strin
     .filter((p): p is string => Boolean(p))
     .map((p) => sanitizeInline(p));
   const marker = n.isRead ? " " : "•";
-  // `relativeTime` returns the raw ISO string when Date.parse fails, so an unparseable
-  // server timestamp reaches the terminal verbatim -- sanitize the rendered value, not the input.
-  const when = sanitizeInline(relativeTime(n.createdAt, now)).padEnd(7);
+  // `relativeTime` sanitizes its own unparseable-date fallback, so no second pass here --
+  // one owner per value, same as every other field on this line.
+  const when = relativeTime(n.createdAt, now).padEnd(7);
   return `${marker} ${sanitizeInline(n.id)}  ${when}  [${sanitizeInline(n.type)}] ${parts.join(" · ")}`;
 }
 
@@ -118,9 +118,12 @@ export async function runNotificationsRead(
       if (wantsJson(flags)) {
         console.log(JSON.stringify(res, null, 2));
       } else {
+        const count = safeNumber(res.updated);
         console.log(
           pc.green(
-            `Marked ${safeNumber(res.updated)} notification${res.updated === 1 ? "" : "s"} read.`
+            // Pluralize off the *validated* value: a server returning the string "1" would
+            // otherwise render "Marked 1 notifications read."
+            `Marked ${count} notification${count === 1 ? "" : "s"} read.`
           )
         );
       }

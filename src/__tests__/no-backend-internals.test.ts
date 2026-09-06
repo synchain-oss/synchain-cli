@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 
 /**
@@ -12,25 +12,47 @@ import * as path from "node:path";
  * anyone who reads this repo.
  *
  * The distinction is easy to lose in a comment written while looking at both codebases at once.
- * Five such comments had accumulated by 2026-09-06 — backend module paths, two internal function
- * names, an internal regex constant, an internal constant plus a link to an internal doc — and
- * every one of them read as helpful context at the time it was written. This test is the part
- * that does not depend on remembering.
+ * Five such comments had accumulated by 2026-09-06, and every one of them read as helpful
+ * context at the time it was written. This test is the part that does not depend on remembering.
+ *
+ * ## What this guards, exactly
+ *
+ * The three patterns below, and nothing else: backend module paths, backend constant names
+ * introduced as "server-side X", and a short list of backend identifiers already seen leaking.
+ *
+ * ## What it deliberately does NOT guard
+ *
+ * **Internal planning codenames and doc references** — `J20`, `C10`, `ADR-013`, `12 §2.1` and
+ * friends, currently spread across ~15 files (workflows, `REUSE.toml`, `.gitleaks.toml`,
+ * `docs/contract-changes/`, `CLAUDE.md`). They are not implementation leaks: they expose no
+ * backend internals, only that a planning system exists which readers cannot follow. Cleaning
+ * them up is a writing task with judgement in it — some references are load-bearing for
+ * maintainers — so it belongs to whoever owns the publicization pass, not to a regex here.
+ *
+ * That split is stated because an earlier version of this comment claimed to cover the
+ * codenames too. A guard whose description is broader than its patterns is worse than no
+ * guard: it invites the next reader to trust a check that was never running.
  */
 const REPO_ROOT = path.join(__dirname, "..", "..");
 
 /**
- * Every git-tracked text file. Deliberately not a hand-maintained list: the point is to cover
- * files nobody thought to check, and `git ls-files` grows on its own.
+ * Every git-tracked text file, read once.
+ *
+ * Deliberately not a hand-maintained list: the point is to cover files nobody thought to check,
+ * and `git ls-files` grows on its own. It lists the *index*, so a tracked-but-deleted file would
+ * otherwise blow up with ENOENT in the middle of a security assertion — filtered, not caught,
+ * so a genuinely unreadable file still fails loudly.
  */
-function trackedTextFiles(): string[] {
-  const out = execFileSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8" });
-  return out
+function trackedTextFiles(): Array<{ rel: string; text: string }> {
+  const listed = execFileSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8" });
+  return listed
     .split("\0")
     .filter(Boolean)
     .filter((f) => /\.(ts|mts|js|mjs|json|md|ya?ml|ps1|toml)$/i.test(f))
     // This file necessarily contains every pattern it forbids.
-    .filter((f) => !f.endsWith("no-backend-internals.test.ts"));
+    .filter((f) => !f.endsWith("no-backend-internals.test.ts"))
+    .filter((f) => existsSync(path.join(REPO_ROOT, f)))
+    .map((rel) => ({ rel, text: readFileSync(path.join(REPO_ROOT, rel), "utf8") }));
 }
 
 /**
@@ -50,7 +72,10 @@ const FORBIDDEN: ReadonlyArray<{ pattern: RegExp; why: string }> = [
     why: "a backend constant's name — describe the rule, not the identifier that holds it",
   },
   {
-    pattern: /\bbuildReplyTree\b|\bfetchProjectDiscussion\b|\beventInputSchema\b|\bFALLBACK_ORIGIN\b/,
+    // Named outright, so a rephrasing ("the backend's FILE_NAME_FORBIDDEN_RE") cannot slip past
+    // the "server-side " wording the pattern above depends on.
+    pattern:
+      /\bbuildReplyTree\b|\bfetchProjectDiscussion\b|\beventInputSchema\b|\bFALLBACK_ORIGIN\b|\bFILE_NAME_FORBIDDEN_RE\b/,
     why: "a backend internal identifier",
   },
 ];
@@ -61,14 +86,14 @@ describe("no closed-source backend internals in the public surface", () => {
   it("finds files to scan (guards against a silently empty sweep)", () => {
     // A `git ls-files` that returns nothing would make every assertion below vacuously pass.
     expect(files.length).toBeGreaterThan(40);
-    expect(files).toContain("src/commands/discussion.ts");
-    expect(files).toContain("docs/reference.md");
+    const names = files.map((f) => f.rel);
+    expect(names).toContain("src/commands/discussion.ts");
+    expect(names).toContain("docs/reference.md");
   });
 
   it.each(FORBIDDEN)("no $why", ({ pattern, why }) => {
     const hits: string[] = [];
-    for (const rel of files) {
-      const text = readFileSync(path.join(REPO_ROOT, rel), "utf8");
+    for (const { rel, text } of files) {
       text.split("\n").forEach((line, i) => {
         if (pattern.test(line)) hits.push(`${rel}:${i + 1}  ${line.trim().slice(0, 120)}`);
       });
