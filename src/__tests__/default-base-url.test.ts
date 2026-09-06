@@ -42,11 +42,22 @@ describe("DEFAULT_BASE_URL", () => {
 });
 
 describe("user-facing strings", () => {
-  it.each(USER_FACING)("%s states the default host by reading the constant", (rel) => {
+  it.each(USER_FACING)("%s contains no host literal at all", (rel) => {
     const src = readFileSync(path.join(SRC, rel), "utf8");
-    // The bug this replaces: `help.ts` and `index.ts` each spelled the old host out, so changing
-    // the constant left two copies behind telling users something else.
-    expect(src).not.toContain("https://www.synchain.ca");
-    expect(src).not.toContain("synchain.vercel.app");
+    // Deliberately **not** a blacklist of the current and previous values. Blacklisting those
+    // two would let the exact bug recur: change the default to `https://app.synchain.ca`, spell
+    // it out in `help.ts` at the same time, and both `not.toContain`s stay green while the
+    // duplication is right back. The property worth holding is "these files never state a host,
+    // they read the constant" -- and all three satisfy it today, so it can be asserted directly
+    // rather than approximated.
+    const hits = src
+      .split("\n")
+      .map((line, i) => ({ line: line.trim(), no: i + 1 }))
+      .filter(({ line }) => /https?:\/\//.test(line));
+    expect(
+      hits,
+      `${rel} states a URL literally; import it from a constant instead:\n` +
+        hits.map((h) => `  :${h.no}  ${h.line.slice(0, 100)}`).join("\n")
+    ).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@ import { assertSafeBaseUrl } from "../util/url.js";
 
 describe("assertSafeBaseUrl", () => {
   it("allows any https URL", () => {
-    expect(() => assertSafeBaseUrl("https://synchain.vercel.app")).not.toThrow();
+    expect(() => assertSafeBaseUrl("https://example.com")).not.toThrow();
     expect(() => assertSafeBaseUrl("https://staging.example.com:8443")).not.toThrow();
   });
 
@@ -15,7 +15,7 @@ describe("assertSafeBaseUrl", () => {
   });
 
   it("rejects cleartext http to a remote host", () => {
-    expect(() => assertSafeBaseUrl("http://synchain.vercel.app")).toThrow(/insecure http/i);
+    expect(() => assertSafeBaseUrl("http://example.com")).toThrow(/insecure http/i);
     expect(() => assertSafeBaseUrl("http://evil.example.com")).toThrow(/insecure http/i);
     expect(() => assertSafeBaseUrl("http://10.0.0.5")).toThrow(/insecure http/i);
   });
