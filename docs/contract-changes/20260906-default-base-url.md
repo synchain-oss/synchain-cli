@@ -6,8 +6,8 @@
 ## 背景
 
 `DEFAULT_BASE_URL` 一直是 `https://synchain.vercel.app` —— 那是**部署域名**,不是平台
-对外发布的地址。平台自有域名是 `https://www.synchain.ca`(主应用 `lib/seo/site.ts` 的
-`FALLBACK_ORIGIN`,`/AGENTS.md` 给 agent 的示例也用这个)。
+对外发布的地址。平台对外发布的自有域名是 `https://www.synchain.ca` —— 这一点由平台自己
+公布,不需要引用闭源实现来成立(下面的探测结果是独立证据)。
 
 两者服务的是同一个生产环境,所以从来没有「坏掉」过 —— **这正是它长期无人察觉的原因**。
 问题在于取向:部署主机名是实现细节,可以在不通知任何人的情况下退役,而这是 CLI 教给
@@ -25,6 +25,34 @@
 
 401 而非 404 说明路由存在;不存在的路由返回 404 说明这个 401 是针对性的、不是「什么都
 401」。两个域名逐项一致。`https://synchain.ca`(无 www)301 到 `https://www.synchain.ca`。
+
+### 补验:上传与下载(评审指出首轮只覆盖了小请求)
+
+首轮只探了 `/api/user/me`。文件传输是另一条路径,而且**上传与下载并不对称**:
+
+- **上传**:`GET …/files/upload-url`(presign,小请求)→ `PUT` 到响应里的 `uploadUrl`
+  —— 那是 API 指过去的对象存储主机,**字节不经过 base URL**;→ `POST …/files` 注册
+  (小请求)。所以 base URL 只承载两个小请求。
+- **下载**:`src/commands/files.ts` 用 base URL 直接拼 `GET …/files/<fileId>`,
+  **字节流是真的穿过 base URL 的**。这一条才是评审那句话真正指向的风险。
+
+探测(未鉴权,只判路由存在性):
+
+| 路由 | `www.synchain.ca` | `synchain.vercel.app` |
+| --- | --- | --- |
+| `GET …/files/upload-url?name=…&size=…&type=…` | `401` | `401` |
+| `GET …/files/<fileId>`(下载) | `401` | `401` |
+| `GET …/files` | `401` | `401` |
+
+响应头比对(排除 `date`/`x-vercel-id` 等每请求变化项):两域均为 `Server: Vercel`、
+`X-Matched-Path` 相同 —— **自有域名前面没有额外的代理/CDN 层**,因此不引入新的
+流式传输或请求体积限制。唯二差异与 CLI 无关:`synchain.vercel.app` 多一个
+`X-Robots-Tag: noindex, nofollow`(刻意不索引部署域名,反过来印证自有域名才是对外
+的那一个),以及两者 HSTS 指令不同。
+
+**未能覆盖的部分(如实记录)**:带鉴权的端到端上传/下载没有对生产环境实测 —— 手头的
+CLI key 是 dev 环境的,打生产两个域名都会 401。上面的结论是「路由存在性 + 无额外代理
+层」这一层,不是「传过一个真实文件」。
 
 ## 改动明细
 
