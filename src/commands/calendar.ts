@@ -4,7 +4,7 @@ import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } f
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 
 // Synchain schedule tags (see lib/calendar/schedule-api.ts eventInputSchema).
 const TAGS = [
@@ -93,7 +93,9 @@ export function parseDateInput(input: string): string {
 
 function formatLocal(iso: string): string {
   const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) return iso;
+  // Falling back to the raw string means an unparseable server timestamp is printed verbatim,
+  // so the fallback -- not just the formatted branch -- has to be sanitized.
+  if (Number.isNaN(dt.getTime())) return sanitizeInline(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
@@ -157,7 +159,7 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
     } else {
       console.log(
         pc.green(
-          `Created event ${result.event.id.slice(0, 8)} (${formatLocal(result.event.startTime)} → ${formatLocal(result.event.endTime)})`
+          `Created event ${shortId(result.event.id)} (${formatLocal(result.event.startTime)} → ${formatLocal(result.event.endTime)})`
         )
       );
     }
@@ -194,7 +196,7 @@ export async function runCalendarLs(flags: CalendarFlags): Promise<void> {
       return;
     }
     const rows = result.events.map((e) => ({
-      id: e.id.slice(0, 8),
+      id: shortId(e.id),
       title: e.title,
       tag: tagLabel(e),
       start: formatLocal(e.startTime),
@@ -314,7 +316,7 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     if (wantsJson(flags)) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(pc.green(`Updated event ${result.event.id.slice(0, 8)}.`));
+      console.log(pc.green(`Updated event ${shortId(result.event.id)}.`));
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
@@ -347,7 +349,7 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
       `/api/projects/${encodeURIComponent(projectId)}/schedule/${encodeURIComponent(resolvedId)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted event ${resolvedId.slice(0, 8)}.`));
+    console.log(pc.green(`Deleted event ${shortId(resolvedId)}.`));
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       console.error(pc.red("Only the creator or a project admin can delete this event."));

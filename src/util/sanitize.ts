@@ -39,3 +39,17 @@ export function sanitizeInline(v: unknown): string {
     .replace(ANSI_RE, "")
     .replace(/[\x00-\x1F\x7F-\x9F]/g, " ");
 }
+
+/**
+ * A server-supplied id trimmed for display: **sanitized first, then sliced**.
+ *
+ * The order is load-bearing. Slicing first can cut through an escape sequence and leave a bare
+ * ESC in the output — the truncation itself becomes the injection. Every `id.slice(0, 8)` that
+ * prints a server value should come through here instead.
+ *
+ * Ids look like the safest thing in a response and are therefore the easiest to skip: nothing in
+ * this CLI verifies that a server actually returned a UUID before printing it.
+ */
+export function shortId(v: unknown, len = 8): string {
+  return sanitizeInline(v).slice(0, len);
+}

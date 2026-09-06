@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { apiFetch, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
+import { shortId } from "../util/sanitize.js";
 
 /** One project member as served by GET /api/projects/[id]/members (camelCase). */
 export interface Member {
@@ -21,10 +22,6 @@ interface MembersListResponse {
 export interface MembersFlags {
   project?: string;
   json?: boolean;
-}
-
-function shortId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 /** Render the members roster as an aligned table. Exported for tests. */

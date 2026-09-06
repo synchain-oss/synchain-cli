@@ -3,7 +3,7 @@ import pc from "picocolors";
 import { apiFetch, formatApiError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 
 /** A notification view-model as served by GET /api/user/notifications. */
 export interface NotificationItem {
@@ -56,8 +56,10 @@ export function formatNotificationLine(n: NotificationItem, now?: number): strin
     .filter((p): p is string => Boolean(p))
     .map((p) => sanitizeInline(p));
   const marker = n.isRead ? " " : "•";
-  const when = relativeTime(n.createdAt, now).padEnd(7);
-  return `${marker} ${n.id}  ${when}  [${n.type}] ${parts.join(" · ")}`;
+  // `relativeTime` returns the raw ISO string when Date.parse fails, so an unparseable
+  // server timestamp reaches the terminal verbatim -- sanitize the rendered value, not the input.
+  const when = sanitizeInline(relativeTime(n.createdAt, now)).padEnd(7);
+  return `${marker} ${sanitizeInline(n.id)}  ${when}  [${sanitizeInline(n.type)}] ${parts.join(" · ")}`;
 }
 
 export async function runNotificationsLs(flags: NotificationsFlags): Promise<void> {
@@ -129,9 +131,9 @@ export async function runNotificationsRead(
     if (wantsJson(flags)) {
       console.log(JSON.stringify(res, null, 2));
     } else if (res.updated > 0) {
-      console.log(pc.green(`Marked ${resolvedId.slice(0, 8)} read.`));
+      console.log(pc.green(`Marked ${shortId(resolvedId)} read.`));
     } else {
-      console.log(pc.dim(`${resolvedId.slice(0, 8)} was already read (or not found).`));
+      console.log(pc.dim(`${shortId(resolvedId)} was already read (or not found).`));
     }
   } catch (err) {
     if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {

@@ -4,7 +4,7 @@ import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } f
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
-import { sanitizeInline, sanitizeBlock } from "../util/sanitize.js";
+import { sanitizeInline, sanitizeBlock, shortId } from "../util/sanitize.js";
 
 // Discussion categories (see lib/discussion/types.ts).
 const CATEGORIES = ["mix", "master", "art", "release", "vocal", "general"] as const;
@@ -58,10 +58,6 @@ export interface DiscussionFlags {
   json?: boolean;
   limit?: string;
   offset?: string;
-}
-
-function shortId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 async function readStdin(): Promise<string> {
@@ -329,7 +325,7 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Created thread ${created.id}`));
+      console.log(pc.green(`Created thread ${sanitizeInline(created.id)}`));
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {
@@ -369,7 +365,7 @@ export async function runDiscussionReply(
     if (wantsJson(flags)) {
       console.log(JSON.stringify(created, null, 2));
     } else {
-      console.log(pc.green(`Replied to ${shortId(parentId)} (new post id: ${created.id}).`));
+      console.log(pc.green(`Replied to ${shortId(parentId)} (new post id: ${sanitizeInline(created.id)}).`));
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {

@@ -2,7 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
-import { sanitizeInline } from "../util/sanitize.js";
+import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
 import { resolveByPrefix } from "../util/resolve-id.js";
 
@@ -50,16 +50,6 @@ async function fetchAllFolders(projectId: string): Promise<Folder[]> {
 }
 
 /**
- * A folder id trimmed for display: **sanitized first, then sliced**.
- *
- * Slicing first could cut through an escape sequence and leave a bare ESC in the output, so the
- * order is load-bearing. Ids are server-supplied like every other field here.
- */
-export function shortFolderId(id: string): string {
-  return sanitizeInline(id).slice(0, 8);
-}
-
-/**
  * `<name> (<8-char id>)` -- the tail every folders success line shares.
  *
  * Extracted, like `renderMembersTable`, so the sanitizing has a regression net: `src/commands`
@@ -67,7 +57,7 @@ export function shortFolderId(id: string): string {
  * string built inline here could lose its `sanitizeInline` with every test still green.
  */
 export function folderLabel(f: { id: string; name: string }): string {
-  return `${sanitizeInline(f.name)} (${shortFolderId(f.id)})`;
+  return `${sanitizeInline(f.name)} (${shortId(f.id)})`;
 }
 
 /** Resolve a folder id (full UUID or prefix) to its record. */
@@ -105,7 +95,7 @@ export function renderTree(folders: Folder[]): string {
       const isLast = idx === children.length - 1;
       const connector = isLast ? "└── " : "├── ";
       lines.push(
-        `${prefix}${connector}${sanitizeInline(child.name)}  ${pc.dim(shortFolderId(child.id))}`
+        `${prefix}${connector}${sanitizeInline(child.name)}  ${pc.dim(shortId(child.id))}`
       );
       walk(child.id, `${prefix}${isLast ? "    " : "│   "}`);
     });
@@ -145,7 +135,7 @@ export async function runFoldersLs(
             { header: "uploadedAt", key: "uploadedAt" },
           ],
           result.files.map((f) => ({
-            id: f.id.slice(0, 8),
+            id: shortId(f.id),
             name: f.name,
             size: f.size,
             uploadedAt: f.uploadedAt,
@@ -274,7 +264,7 @@ export async function runFoldersRename(
     }
     console.log(
       pc.green(
-        `Renamed folder → ${sanitizeInline(result.folder.name)} (id: ${shortFolderId(resolved.id)}).`
+        `Renamed folder → ${sanitizeInline(result.folder.name)} (id: ${shortId(resolved.id)}).`
       )
     );
   } catch (err) {

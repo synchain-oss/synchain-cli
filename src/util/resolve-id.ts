@@ -28,7 +28,7 @@
  * that project controls — an unsanitized one is a terminal-escape injection vector.
  */
 
-import { sanitizeInline } from "./sanitize.js";
+import { sanitizeInline, shortId } from "./sanitize.js";
 
 /** Canonical 36-char UUID (the id shape Synchain stores for every record). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -165,7 +165,7 @@ function slugKeyOf(value: string | null | undefined): string | null {
  */
 export function projectRefLabel(p: ProjectRefRecord): string {
   const custom = p.customId?.trim();
-  return custom && custom.length > 0 ? custom : p.id.slice(0, 8);
+  return custom && custom.length > 0 ? custom : shortId(p.id);
 }
 
 /**

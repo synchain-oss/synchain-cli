@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Error bodies are capped by line count as well as by characters.** The two bound different
   things: characters keep stderr from flooding, lines keep the error's own first line from
   scrolling out of view. 2000 characters of newlines is still ~666 lines.
+- **Every remaining server string now goes through the sanitizer, and every shortened id goes
+  through one shared `shortId` helper** that sanitizes *before* slicing -- cutting first can land
+  mid-escape and make the truncation itself the injection. This closed a dozen further sites an
+  audit turned up beyond the two originally reported: the download path printed on completion
+  (sanitized 19 lines earlier in the same flow, but not here), the notification line's id / type /
+  timestamp, `relativeTime` and `formatLocal` returning the raw string when parsing fails, ids
+  echoed by `files`/`discussion`/`calendar` success and 404 lines, the storage key in the upload
+  warning, and the logout confirmation prompt -- the one server string fed to a prompt rather than
+  to `console.*`, which is why a `grep console` sweep never saw it.
 
 ## [0.7.0] - 2026-09-05
 
