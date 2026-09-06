@@ -106,5 +106,19 @@ export async function markWelcomeSeen(): Promise<void> {
   await fs.writeFile(getWelcomeSentinelPath(), new Date().toISOString(), "utf8");
 }
 
-/** Default Synchain host. Overridable per-login via `--base-url`. */
-export const DEFAULT_BASE_URL = "https://synchain.vercel.app";
+/**
+ * Default Synchain host. Overridable per-login via `--base-url`.
+ *
+ * The official origin, not the Vercel deployment domain that used to sit here. Both serve the
+ * same production app, but only one of them is the name the platform actually publishes -- a
+ * deployment hostname is an implementation detail that can be retired without warning, and it
+ * is what every unconfigured `synchain login` was quietly teaching users to trust.
+ *
+ * ⚠ Only the **default** moves. An existing `config.json` already stores whatever `baseUrl` its
+ * login resolved, and that value keeps winning; nobody gets re-pointed by upgrading.
+ *
+ * ⚠ Anything printed to users must read this constant rather than restate the value. The drift
+ * this change fixes existed because two help strings hardcoded the old host and quietly fell out
+ * of step with it.
+ */
+export const DEFAULT_BASE_URL = "https://www.synchain.ca";

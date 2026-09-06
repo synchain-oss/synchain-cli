@@ -143,7 +143,7 @@ human team. `discussion ls` / `read` show an `[AI]` tag for these posts.
 | Variable / flag   | Purpose                                             |
 | ----------------- | --------------------------------------------------- |
 | `SYNCHAIN_TOKEN`  | CLI key for non-interactive `login` (never argv).   |
-| `--base-url <url>`| Target deployment (default `https://synchain.vercel.app`); persisted after login. |
+| `--base-url <url>`| Target deployment (default `https://www.synchain.ca`); persisted after login. |
 | `--project <id>`  | Override the active project for one command.         |
 | `--json`          | Machine-readable stdout on read commands.            |
 | `--yes`           | Skip the `files rm` confirmation.                    |

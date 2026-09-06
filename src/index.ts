@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
-import { isFirstRun, markWelcomeSeen } from "./config.js";
+import { DEFAULT_BASE_URL, isFirstRun, markWelcomeSeen } from "./config.js";
 import { printWelcomeBanner } from "./commands/welcome.js";
 import { runLogin } from "./commands/login.js";
 import { runLogout } from "./commands/logout.js";
@@ -65,7 +65,7 @@ function buildProgram(): Command {
   program
     .command("login")
     .description("Authenticate the CLI against a Synchain instance")
-    .option("--base-url <url>", "Base URL (default https://synchain.vercel.app)")
+    .option("--base-url <url>", `Base URL (default ${DEFAULT_BASE_URL})`)
     .action(async (opts) => {
       // The key is never accepted via argv (it would leak into shell history and
       // /proc/<pid>/cmdline). Use SYNCHAIN_TOKEN in CI, or the interactive prompt.
