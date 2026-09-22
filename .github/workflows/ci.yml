@@ -29,7 +29,7 @@ jobs:
           - os: windows-latest          # CLI 有路径/文件名处理逻辑,必须验 Windows
             node: '20'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '${{ matrix.node }}', cache: npm }
       # --ignore-scripts:npm ci 默认执行依赖的 install script 与本包自己的 lifecycle
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '20', cache: npm }
       - run: npm ci --ignore-scripts && npm run build   # --ignore-scripts 理由见 checks
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - run: |
           bad=0
           for p in 'DLsnows/Synchain' 'UNLICENSED' 'docs/cli/'; do
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '20', cache: npm }
       - run: npm ci --ignore-scripts    # --ignore-scripts 理由见 checks
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
       - uses: ./.github/actions/setup-gitleaks
       - name: Secret scan (working tree)
         run: gitleaks detect --no-git --source . --redact -v --config .gitleaks.toml
@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with: { fetch-depth: 0 }        # 默认浅克隆只有 1 个 commit,扫历史必须要完整 clone
       - uses: ./.github/actions/setup-gitleaks
       - name: Secret scan (git history)
