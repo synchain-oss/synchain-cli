@@ -30,7 +30,7 @@ jobs:
             node: '20'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
         with: { node-version: '${{ matrix.node }}', cache: npm }
       # --ignore-scripts:npm ci 默认执行依赖的 install script 与本包自己的 lifecycle
       # script。本项目的构建(tsc)与测试(vitest)都不依赖它们,实测去掉后全绿。
@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
         with: { node-version: '20', cache: npm }
       - run: npm ci --ignore-scripts && npm run build   # --ignore-scripts 理由见 checks
       - name: Verify package contents
@@ -102,7 +102,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020   # v7.0.0
         with: { node-version: '20', cache: npm }
       - run: npm ci --ignore-scripts    # --ignore-scripts 理由见 checks
       - run: npm audit --audit-level=high
