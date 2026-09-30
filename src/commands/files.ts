@@ -304,10 +304,17 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       `/api/projects/${encodeURIComponent(projectId)}/files/upload-url?${qs.toString()}`
     );
 
-    // --dry-run stops after the presign GET: a read that signs a ticket and writes nothing, so
-    // the rehearsal has already been through the server's scope, size-cap and folder checks (a
-    // 403, 413 or 400 surfaces here). The presigned URL itself is a write credential and is
-    // never printed.
+    // --dry-run stops after the presign GET, so the rehearsal has already been through the
+    // server's scope, size-cap and folder checks (a 403, 413 or 400 surfaces here). Those are
+    // the checks an agent most needs before sending gigabytes, and only the server can run them.
+    //
+    // This relies on upload-url being a GET without side effects: it signs a ticket and records
+    // nothing (no pending row, no quota hold). 0.5.1 shipped the same short-circuit in the same
+    // place. If the endpoint ever starts writing on that GET, this short-circuit has to
+    // move above it.
+    //
+    // The presigned URL is a write credential. It is never printed, and it is dropped unused
+    // here; it stays valid until it expires.
     if (flags.dryRun) {
       reportDryRun(flags, {
         action: "files.upload",

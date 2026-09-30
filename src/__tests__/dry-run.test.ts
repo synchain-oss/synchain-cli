@@ -793,6 +793,18 @@ describe("discussion post --dry-run", () => {
     expect(plan.target.contentChars).toBe(500);
     expect(plan.target.contentPreview.length).toBeLessThan(200);
   });
+
+  it("caps the preview on a code point: an emoji at the cut stays whole, no lone surrogate", async () => {
+    const { runDiscussionPost } = await import("../commands/discussion.js");
+    // 119 ASCII chars, then an emoji (two UTF-16 units) straddling the 120-unit mark.
+    const content = `${"a".repeat(119)}\u{1F3B5}${"b".repeat(10)}`;
+
+    await runDiscussionPost({ project: PROJECT, title: "Long", content, dryRun: true, json: true });
+
+    const plan = parsePlan<{ target: { contentPreview: string } }>();
+    expect(plan.target.contentPreview).toBe(`${"a".repeat(119)}\u{1F3B5}…`);
+    expect(stdout.join("\n")).not.toMatch(/\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f])/i);
+  });
 });
 
 describe("discussion reply --dry-run", () => {

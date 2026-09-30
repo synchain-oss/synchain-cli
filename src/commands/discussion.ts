@@ -68,10 +68,16 @@ export interface DiscussionFlags {
  */
 const DRY_RUN_CONTENT_PREVIEW_CHARS = 120;
 
+/**
+ * Cuts on code points, not UTF-16 units: `slice` on the string could split an emoji's surrogate
+ * pair and leave a lone half at the end of the preview (`\ud83d` in JSON, a replacement glyph on
+ * a terminal).
+ */
 function contentPreview(content: string): string {
-  return content.length <= DRY_RUN_CONTENT_PREVIEW_CHARS
+  const codePoints = Array.from(content);
+  return codePoints.length <= DRY_RUN_CONTENT_PREVIEW_CHARS
     ? content
-    : `${content.slice(0, DRY_RUN_CONTENT_PREVIEW_CHARS)}…`;
+    : `${codePoints.slice(0, DRY_RUN_CONTENT_PREVIEW_CHARS).join("")}…`;
 }
 
 async function readStdin(): Promise<string> {

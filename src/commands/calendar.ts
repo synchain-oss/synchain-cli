@@ -451,6 +451,6 @@ export const CALENDAR_HELP = {
     "",
     "Only the event creator or a project admin may edit or remove an event.",
     "`--dry-run` on add/edit/rm validates and resolves, then prints the exact body or",
-    "id it would send, and sends nothing (see `synchain help safety`).",
+    "id it would send, and sends no write (see `synchain help safety`).",
   ].join("\n"),
 };
