@@ -39,11 +39,29 @@ export function userLabel(user: MeResponse["user"]): string {
 
 export async function runLogin(flags: LoginFlags): Promise<void> {
   const existing = (await loadConfig()) ?? ({} as CliConfig);
+  const envToken = process.env[TOKEN_ENV_VAR]?.trim();
 
-  // Resolve baseUrl.
+  // Without a terminal on stdin (CI, an agent harness, `</dev/null`) nobody can answer a prompt.
+  // Opening one anyway printed it, ended the process with exit 0 and saved nothing: a scripted
+  // login that reported success and left the machine logged out. So this path never prompts --
+  // the key must come from the environment, and a missing one is a usage error up front, before
+  // any request.
+  const interactive = process.stdin.isTTY === true;
+  if (!interactive && !envToken) {
+    reportError(
+      new Error(
+        `No CLI key: stdin is not a terminal, so the key cannot be prompted for. Set ${TOKEN_ENV_VAR} in the environment (a key is never accepted as a command-line argument).`
+      ),
+      { code: "missing_argument" }
+    );
+    return;
+  }
+
+  // Resolve baseUrl. Without a terminal, take the answer the prompt would have defaulted to.
   let baseUrl = flags.baseUrl;
   if (!baseUrl) {
-    baseUrl = await promptText("Base URL", { initial: existing.baseUrl ?? DEFAULT_BASE_URL });
+    const fallback = existing.baseUrl ?? DEFAULT_BASE_URL;
+    baseUrl = interactive ? await promptText("Base URL", { initial: fallback }) : fallback;
     if (!baseUrl) {
       reportError(new Error("Login cancelled."), { code: "login_cancelled" });
       return;
@@ -59,12 +77,26 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     return;
   }
 
+  // On a terminal the prompt shows which host the key is about to go to; without one nobody sees
+  // it. Say so before sending anything when that host is a stored, non-default one -- say, left
+  // over from testing against another deployment -- so an injected key going somewhere
+  // unexpected is visible in the log. stdout, not stderr: on failure, stderr stays exactly one
+  // envelope line (the envelope's `url` names the host too). `login` has no `--json` today; if it
+  // gets one, fold this into the JSON (say, a `baseUrl` field) like the success lines below --
+  // not onto stderr, which would make a failure two lines. It prints before those lines, outside
+  // their block, so it is easy to miss.
+  if (!interactive && !flags.baseUrl && baseUrl !== DEFAULT_BASE_URL) {
+    console.log(
+      pc.dim(`Using stored base URL ${sanitizeInline(baseUrl)} (pass --base-url to override).`)
+    );
+  }
+
   // Resolve the CLI key. Precedence:
   //   1. SYNCHAIN_TOKEN env var (CI-friendly, no argv leakage).
-  //   2. Interactive hidden prompt (the default for humans).
+  //   2. Interactive hidden prompt (the default for humans; only reached on a terminal).
   // We intentionally do NOT accept a `--token` flag: argv ends up in shell
   // history and /proc/<pid>/cmdline, which would leak the bearer.
-  let token = process.env[TOKEN_ENV_VAR]?.trim();
+  let token = envToken;
   if (!token) {
     token = await promptPassword("CLI key (input hidden, from Settings → CLI Access)");
     if (!token) {
