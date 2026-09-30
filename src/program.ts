@@ -7,10 +7,12 @@
  * module is not reachable through the `exports` map, so tests can import `buildProgram` /
  * `main` without them becoming part of the package surface.
  */
-import { Command } from "commander";
+import { Command, Help, Option } from "commander";
 import { createRequire } from "node:module";
 
 import { DEFAULT_BASE_URL, isFirstRun, markWelcomeSeen } from "./config.js";
+import { buildHelpJson } from "./help-json.js";
+import { argvWantsJsonOutput, OUTPUT_FORMATS, resolveOutputFormat } from "./output-format.js";
 import { printWelcomeBanner } from "./commands/welcome.js";
 import { runLogin } from "./commands/login.js";
 import { runLogout } from "./commands/logout.js";
@@ -50,20 +52,57 @@ import { DOCS_AGENTS, DOCS_README } from "./constants.js";
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
+const DOCS_HELP_TEXT =
+  "\nAI agents: install + usage guide at\n" +
+  `  ${DOCS_AGENTS}\n` +
+  "Humans: full reference at\n" +
+  `  ${DOCS_README}\n`;
+
 export function buildProgram(): Command {
   const program = new Command();
+
+  // `--help --format json`: swap the help *renderer* rather than scanning argv for `-h`/`--help`.
+  // By the time commander prints help it has parsed the root's `--format`, so the value can be
+  // read off the parent chain; and an option *value* that happens to be `-h`
+  // (`discussion post --title -h`) never reaches this code at all. An argv pre-scan cannot tell
+  // the two apart, and would skip the write while still exiting 0.
+  // Must come before any .command(): a subcommand copies the help configuration when created.
+  program.configureHelp({
+    formatHelp: (cmd, helper) =>
+      resolveOutputFormat(cmd) === "json"
+        ? `${JSON.stringify(buildHelpJson(cmd), null, 2)}\n`
+        : // Not `helper.formatHelp`: on this helper that is the function being defined here.
+          Help.prototype.formatHelp.call(helper, cmd, helper),
+  });
 
   program
     .name("synchain")
     .description("CLI for the Synchain platform")
     .version(pkg.version)
-    .addHelpText(
-      "after",
-      "\nAI agents: install + usage guide at\n" +
-        `  ${DOCS_AGENTS}\n` +
-        "Humans: full reference at\n" +
-        `  ${DOCS_README}\n`
+    .addOption(
+      // The choices go in the description too: the JSON command tree carries flags and
+      // description only, and an agent reading it should not have to guess the legal values.
+      new Option(
+        "--format <fmt>",
+        "Output format: text | json (json turns on each command's --json)"
+      )
+        .choices(OUTPUT_FORMATS)
+        .default("text")
+    )
+    // Empty in JSON mode: text after the JSON document would make stdout unparseable.
+    .addHelpText("after", ({ command }) =>
+      resolveOutputFormat(command) === "json" ? "" : DOCS_HELP_TEXT
     );
+
+  // `--format json` means `--json` for every command that declares `--json`. Only for those:
+  // injecting a synthetic `--json` into argv would fail `files rm`, `project use` and the other
+  // commands without JSON output as an unknown option.
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    if (resolveOutputFormat(actionCommand) !== "json") return;
+    if (actionCommand.options.some((option) => option.long === "--json")) {
+      actionCommand.setOptionValue("json", true);
+    }
+  });
 
   // -- auth
   program
@@ -340,10 +379,11 @@ export function buildProgram(): Command {
 }
 
 export async function main(argv: string[] = process.argv): Promise<void> {
-  // First-run welcome banner —— 仅在【交互式且非 --json】时打印，且只在真正打印后才落 sentinel。
+  // First-run welcome banner —— 仅在【交互式且非 JSON 输出】时打印，且只在真正打印后才落 sentinel。
   // banner 走 stderr（见 welcome.ts），据 stderr 是否为终端判定：--json/管道/重定向时完全不打印、
   // 也不消费 first-run（让人类首次交互运行仍能看到 banner，同时绝不污染 stdout/--json）。
-  const wantsJson = argv.includes("--json");
+  // `--format json` / `--format=json` 与 `--json` 同等对待：这一步发生在 commander 解析之前。
+  const wantsJson = argvWantsJsonOutput(argv);
   if (isFirstRun() && process.stderr.isTTY === true && !wantsJson) {
     printWelcomeBanner();
     try {

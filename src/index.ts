@@ -33,3 +33,22 @@ if (invokedAsScript) {
     return;
   });
 }
+
+/**
+ * The public API of `@synchain/cli`: the typed error hierarchy, the `--format` values, and the
+ * shape of `--help --format json`. `exports` opens only `.` and `./package.json`, so anything
+ * not re-exported here exists in dist/ but cannot be imported by anyone. The CLI's own wiring
+ * is deliberately not re-exported: once exported it would be API to keep stable.
+ */
+export {
+  ApiError,
+  AuthError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  RateLimitError,
+  ServerError,
+} from "./api.js";
+export type { OutputFormat } from "./output-format.js";
+export type { CommandTree, CommandTreeNode, CommandTreeOption } from "./help-json.js";

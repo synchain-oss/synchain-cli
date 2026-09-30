@@ -178,6 +178,26 @@ describe("commander parsing", () => {
     expect(call[0]).toMatchObject({ tag: "custom", customTag: "Tracking", title: "Session" });
   });
 
+  it("parses the global `--format json` and forwards it as the command's --json", async () => {
+    const filesMod = await import("../commands/files.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync([
+      "node",
+      "synchain",
+      "--format",
+      "json",
+      "files",
+      "ls",
+      "--folder",
+      "abc",
+    ]);
+    const calls = (filesMod.runFilesLs as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toMatchObject({ folder: "abc", json: true });
+  });
+
   it("--help output points at the new repo (REPO_URL)", async () => {
     const { buildProgram } = await import("../program.js");
     const program = buildProgram();
