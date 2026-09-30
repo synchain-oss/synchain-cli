@@ -48,6 +48,7 @@ import {
 import { runNotificationsLs, runNotificationsRead } from "./commands/notifications.js";
 import { runMembersLs } from "./commands/members.js";
 import { runHelp } from "./commands/help.js";
+import { runDoctor } from "./commands/doctor.js";
 import { DOCS_AGENTS, DOCS_README } from "./constants.js";
 
 const require = createRequire(import.meta.url);
@@ -382,11 +383,23 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
       await runNotificationsRead(id, opts);
     });
 
+  // -- doctor (offline: never makes a request)
+  program
+    .command("doctor")
+    .description(
+      "Check the local setup offline: config file, stored key shape, base URL, active project"
+    )
+    .option("--json", "Output JSON")
+    .action(async (opts) => {
+      await runDoctor({ json: Boolean(opts.json) });
+    });
+
   // -- help
   program
     .command("help [topic]")
     .description(
-      "Rich help per topic (login, project, files, folders, calendar, discussion, members)"
+      "Rich help per topic (login, project, files, folders, calendar, discussion, members, " +
+        "notifications, doctor)"
     )
     .action((topic: string | undefined) => {
       runHelp(topic);

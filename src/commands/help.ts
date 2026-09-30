@@ -104,6 +104,22 @@ const TOPICS: Record<string, Topic> = {
       "works too). `read --all` clears every unread notification.",
     ].join("\n"),
   },
+  doctor: {
+    name: "doctor",
+    summary: "Check the local setup offline: Node, config file, stored key, base URL, project.",
+    body: [
+      "Usage:",
+      "  synchain doctor [--json]",
+      "",
+      "Makes no request. It checks what can be settled before a round trip: Node >= 20,",
+      "the config file exists and parses (and is chmod 600 on POSIX), the stored key",
+      "looks like a CLI key (shown masked, first 8 + last 4), the base URL is one the CLI",
+      "will send a key to, and an active project is set. Exit code 1 if any check fails.",
+      "",
+      "SYNCHAIN_TOKEN is read by `synchain login` only; every other command uses the",
+      "stored key. `synchain whoami` asks the server whether that key is still valid.",
+    ].join("\n"),
+  },
 };
 
 const HEADER = [
@@ -121,9 +137,10 @@ const HEADER = [
   "  synchain discussion ls|read|post|reply     Read and post in discussions",
   "  synchain members ls                        List project members (read-only)",
   "  synchain notifications ls|read             Your notifications (alias: notif)",
+  "  synchain doctor                            Check the local setup offline",
   "  synchain help <topic>                      Detailed help for a topic",
   "",
-  "Topics: login, project, files, folders, calendar, discussion, members, notifications",
+  "Topics: login, project, files, folders, calendar, discussion, members, notifications, doctor",
   "",
   "Pass --help to any subcommand for its full flag list.",
   "",

@@ -39,6 +39,7 @@ vi.mock("../commands/logout.js", () => ({ runLogout: vi.fn() }));
 vi.mock("../commands/whoami.js", () => ({ runWhoami: vi.fn() }));
 vi.mock("../commands/project.js", () => ({ runProjectLs: vi.fn(), runProjectUse: vi.fn() }));
 vi.mock("../commands/help.js", () => ({ runHelp: vi.fn() }));
+vi.mock("../commands/doctor.js", () => ({ runDoctor: vi.fn() }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Mock = ReturnType<typeof vi.fn>;
@@ -196,6 +197,19 @@ describe("commander parsing", () => {
     const calls = (filesMod.runFilesLs as Mock).mock.calls;
     const call = calls[calls.length - 1]!;
     expect(call[0]).toMatchObject({ folder: "abc", json: true });
+  });
+
+  it("parses `doctor --json` and `--format json doctor` alike", async () => {
+    const doctorMod = await import("../commands/doctor.js");
+    const { buildProgram } = await import("../program.js");
+    await buildProgram().parseAsync(["node", "synchain", "doctor", "--json"]);
+    await buildProgram().parseAsync(["node", "synchain", "--format", "json", "doctor"]);
+    await buildProgram().parseAsync(["node", "synchain", "doctor"]);
+    expect((doctorMod.runDoctor as Mock).mock.calls.map((call) => call[0])).toEqual([
+      { json: true },
+      { json: true },
+      { json: false },
+    ]);
   });
 
   it("--help output points at the new repo (REPO_URL)", async () => {
