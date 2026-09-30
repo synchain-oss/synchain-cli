@@ -39,11 +39,29 @@ export function userLabel(user: MeResponse["user"]): string {
 
 export async function runLogin(flags: LoginFlags): Promise<void> {
   const existing = (await loadConfig()) ?? ({} as CliConfig);
+  const envToken = process.env[TOKEN_ENV_VAR]?.trim();
 
-  // Resolve baseUrl.
+  // Without a terminal on stdin (CI, an agent harness, `</dev/null`) nobody can answer a prompt.
+  // Opening one anyway printed it, ended the process with exit 0 and saved nothing: a scripted
+  // login that reported success and left the machine logged out. So this path never prompts --
+  // the key must come from the environment, and a missing one is a usage error up front, before
+  // any request.
+  const interactive = process.stdin.isTTY === true;
+  if (!interactive && !envToken) {
+    reportError(
+      new Error(
+        `No CLI key: stdin is not a terminal, so the key cannot be prompted for. Set ${TOKEN_ENV_VAR} in the environment (a key is never accepted as a command-line argument).`
+      ),
+      { code: "missing_argument" }
+    );
+    return;
+  }
+
+  // Resolve baseUrl. Without a terminal, take the answer the prompt would have defaulted to.
   let baseUrl = flags.baseUrl;
   if (!baseUrl) {
-    baseUrl = await promptText("Base URL", { initial: existing.baseUrl ?? DEFAULT_BASE_URL });
+    const fallback = existing.baseUrl ?? DEFAULT_BASE_URL;
+    baseUrl = interactive ? await promptText("Base URL", { initial: fallback }) : fallback;
     if (!baseUrl) {
       reportError(new Error("Login cancelled."), { code: "login_cancelled" });
       return;
@@ -61,10 +79,10 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
 
   // Resolve the CLI key. Precedence:
   //   1. SYNCHAIN_TOKEN env var (CI-friendly, no argv leakage).
-  //   2. Interactive hidden prompt (the default for humans).
+  //   2. Interactive hidden prompt (the default for humans; only reached on a terminal).
   // We intentionally do NOT accept a `--token` flag: argv ends up in shell
   // history and /proc/<pid>/cmdline, which would leak the bearer.
-  let token = process.env[TOKEN_ENV_VAR]?.trim();
+  let token = envToken;
   if (!token) {
     token = await promptPassword("CLI key (input hidden, from Settings → CLI Access)");
     if (!token) {

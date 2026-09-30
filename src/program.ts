@@ -127,7 +127,11 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
   program
     .command("login")
     .description("Authenticate the CLI against a Synchain instance")
-    .option("--base-url <url>", `Base URL (default ${DEFAULT_BASE_URL})`)
+    .option(
+      "--base-url <url>",
+      // Not "a self-hosted instance": the server cannot be self-hosted (README).
+      `Override the API host (default ${DEFAULT_BASE_URL}; only needed for testing against another deployment)`
+    )
     .action(async (opts) => {
       // The key is never accepted via argv (it would leak into shell history and
       // /proc/<pid>/cmdline). Use SYNCHAIN_TOKEN in CI, or the interactive prompt.
