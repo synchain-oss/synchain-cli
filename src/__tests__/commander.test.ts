@@ -179,6 +179,51 @@ describe("commander parsing", () => {
     expect(call[0]).toMatchObject({ tag: "custom", customTag: "Tracking", title: "Session" });
   });
 
+  it("parses `files rm <id> --dry-run --json` (rm has both since --dry-run)", async () => {
+    const filesMod = await import("../commands/files.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync(["node", "synchain", "files", "rm", "file-abc", "--dry-run", "--json"]);
+    const calls = (filesMod.runFilesRm as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBe("file-abc");
+    expect(call[1]).toMatchObject({ dryRun: true, json: true });
+  });
+
+  it("parses `notifications read --all --dry-run`", async () => {
+    const notifMod = await import("../commands/notifications.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync(["node", "synchain", "notifications", "read", "--all", "--dry-run"]);
+    const calls = (notifMod.runNotificationsRead as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBeUndefined();
+    expect(call[1]).toMatchObject({ all: true, dryRun: true });
+  });
+
+  it("parses `calendar edit <id> --title T --dry-run`", async () => {
+    const calMod = await import("../commands/calendar.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync([
+      "node",
+      "synchain",
+      "calendar",
+      "edit",
+      "evt-abc",
+      "--title",
+      "T",
+      "--dry-run",
+    ]);
+    const calls = (calMod.runCalendarEdit as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBe("evt-abc");
+    expect(call[1]).toMatchObject({ title: "T", dryRun: true });
+  });
+
   it("parses the global `--format json` and forwards it as the command's --json", async () => {
     const filesMod = await import("../commands/files.js");
     const { buildProgram } = await import("../program.js");

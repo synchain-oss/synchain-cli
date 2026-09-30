@@ -378,10 +378,10 @@ export function stderrPrefersJson(env: NodeJS.ProcessEnv = process.env): boolean
  * the flag speaks for stderr as well (like `--json`): a caller that parses the result parses the
  * failure.
  *
- * argv is scanned as well as the flags because `login`, `logout`, `project use`,
- * `files download`, `files rm`, `folders rm` and `calendar rm` declare no `--json`: they have no
- * JSON form of their normal output, but they can still fail, and an agent driving everything
- * with `--format json` should not get prose from exactly those.
+ * argv is scanned as well as the flags because `login`, `logout`, `project use` and
+ * `files download` declare no `--json`: they have no JSON form of their normal output, but they
+ * can still fail, and an agent driving everything with `--format json` should not get prose
+ * from exactly those.
  *
  * Known limit: before parsing, argv cannot tell an option from an option value that happens to
  * read `--json` (`discussion post --title --json`). Such a run's errors come out as JSON; that

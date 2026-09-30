@@ -17,6 +17,7 @@ import {
   withErrorBody,
 } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { renderTable } from "../util/table.js";
 import { Progress } from "../util/progress.js";
 import { promptConfirm } from "../util/prompt.js";
@@ -63,6 +64,7 @@ export interface FilesFlags {
   out?: string;
   to?: string;
   yes?: boolean;
+  dryRun?: boolean;
 }
 
 // Mirrors the server's file-name rule (no path separators, no control chars). A local
@@ -302,6 +304,28 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       `/api/projects/${encodeURIComponent(projectId)}/files/upload-url?${qs.toString()}`
     );
 
+    // --dry-run stops after the presign GET: a read that signs a ticket and writes nothing, so
+    // the rehearsal has already been through the server's scope, size-cap and folder checks (a
+    // 403, 413 or 400 surfaces here). The presigned URL itself is a write credential and is
+    // never printed.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.upload",
+        target: {
+          project: projectId,
+          localPath: absPath,
+          file: { name: fileName, size: stat.size, mimeType },
+          folderId: resolvedFolderId,
+          storageKey: upload.key,
+        },
+        summary:
+          `would upload ${fileName} (${formatBytes(stat.size)}) to ` +
+          `${resolvedFolderId ? `folder ${shortId(resolvedFolderId)}` : "the project root"}; ` +
+          `the server accepted the upload request.`,
+      });
+      return;
+    }
+
     // 2. PUT the file body to the presigned URL. The Content-Type MUST match the
     //    `type` the URL was signed with, or the storage endpoint rejects the PUT.
     // Sanitized like the completion line 29 lines below -- and more urgently: `Progress.render`
@@ -534,6 +558,25 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
     const projectId = resolveActiveProject(cfg, flags.project);
     const resolved = await resolveFile(projectId, fileId);
     const folderId = flags.to === "root" ? null : await resolveFolderId(projectId, flags.to);
+
+    // After both resolutions, before the write: which records the prefixes landed on is the
+    // whole point of the rehearsal.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.mv",
+        target: {
+          project: projectId,
+          file: { id: resolved.id, name: resolved.name, folderId: resolved.folderId },
+          to: folderId,
+        },
+        summary:
+          `would move ${resolved.name} (${shortId(resolved.id)}) from ` +
+          `${resolved.folderId ? `folder ${shortId(resolved.folderId)}` : "root"} to ` +
+          `${folderId ? `folder ${shortId(folderId)}` : "root"}.`,
+      });
+      return;
+    }
+
     const result = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "PATCH", body: { folderId } }
@@ -568,7 +611,29 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
     // 1. Resolve 8-char prefix → full record via a project-wide files walk.
     const resolved = await resolveFile(projectId, fileId);
 
-    // 2. Confirm (skipped with --yes for non-interactive use).
+    // 2. --dry-run stops after resolution and BEFORE the confirmation: nothing will be deleted,
+    //    so there is nothing to confirm -- and without a TTY promptConfirm answers false, which
+    //    would leave a scripted preview printing only "Cancelled.".
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.rm",
+        target: {
+          project: projectId,
+          file: {
+            id: resolved.id,
+            name: resolved.name,
+            size: resolved.size,
+            folderId: resolved.folderId,
+          },
+        },
+        summary:
+          `would delete ${resolved.name} (${shortId(resolved.id)}, ` +
+          `${formatBytes(resolved.size)}) from project ${projectId}.`,
+      });
+      return;
+    }
+
+    // 3. Confirm (skipped with --yes for non-interactive use).
     if (!flags.yes) {
       const ok = await promptConfirm(
         `Delete ${sanitizeInline(resolved.name)} (${shortId(resolved.id)})?`,
@@ -580,12 +645,16 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       }
     }
 
-    // 3. DELETE the file (server removes the stored object then the row).
+    // 4. DELETE the file (server removes the stored object then the row).
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
+    if (wantsJson(flags)) {
+      console.log(JSON.stringify({ deleted: { id: resolved.id, name: resolved.name } }, null, 2));
+    } else {
+      console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
+    }
   } catch (err) {
     reportError(err, { json: wantsJson(flags) });
     return;
@@ -638,6 +707,17 @@ export async function runFilesRename(
       } else {
         process.stderr.write(pc.yellow(`${note}\n`));
       }
+    }
+
+    // After the extension warning: that warning is one of the most useful things a rehearsal
+    // of a rename can show.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.rename",
+        target: { project: projectId, file: { id: resolved.id, name: resolved.name }, newName },
+        summary: `would rename ${resolved.name} → ${newName} (id: ${shortId(resolved.id)}).`,
+      });
+      return;
     }
 
     try {
