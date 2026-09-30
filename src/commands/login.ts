@@ -82,8 +82,9 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
   // over from testing against another deployment -- so an injected key going somewhere
   // unexpected is visible in the log. stdout, not stderr: on failure, stderr stays exactly one
   // envelope line (the envelope's `url` names the host too). `login` has no `--json` today; if it
-  // gets one, this line must move to stderr or into the JSON like the success lines below -- it
-  // prints before them, outside their block, so it is easy to miss.
+  // gets one, fold this into the JSON (say, a `baseUrl` field) like the success lines below --
+  // not onto stderr, which would make a failure two lines. It prints before those lines, outside
+  // their block, so it is easy to miss.
   if (!interactive && !flags.baseUrl && baseUrl !== DEFAULT_BASE_URL) {
     console.log(
       pc.dim(`Using stored base URL ${sanitizeInline(baseUrl)} (pass --base-url to override).`)
