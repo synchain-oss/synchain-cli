@@ -3,18 +3,129 @@ import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
 import { sanitizeBlock } from "./util/sanitize.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 
-/** Typed error thrown by apiFetch on non-2xx responses. */
+/**
+ * Typed error thrown by apiFetch on non-2xx responses, and the base of the subclasses below.
+ *
+ * The subclasses only add: an existing `err instanceof ApiError && err.status === 404` keeps
+ * matching unchanged (a subclass instance is an ApiError, and `status` is filled as before).
+ * That is the condition for adding them at all; otherwise a patch upgrade would silently stop a
+ * caller's catch from matching.
+ */
 export class ApiError extends Error {
   status: number;
   body: unknown;
   url: string;
   constructor(status: number, url: string, body: unknown, message?: string) {
     super(message ?? `API ${status} from ${url}`);
-    this.name = "ApiError";
+    // `new.target.name` rather than a string literal per subclass: a hard-coded name is
+    // forgotten when a class is renamed, and then the field lies. No output path reads `name`
+    // (formatApiError prints status / url / body), so this changes no byte the CLI prints --
+    // only a stack trace's first line and `console.log(err)`.
+    this.name = new.target.name;
     this.status = status;
     this.url = url;
     this.body = body;
   }
+}
+
+/*
+ * Subclasses by HTTP status.
+ *
+ * By status, not by the snake_case `error` code in the response body: that code is finer
+ * (`folder_not_empty`, `project_scope_denied`, ...) but it is the server's vocabulary and changes
+ * with the product. Turning it into class names would tie the CLI's types to a list that can
+ * change under it. Status codes are the stable HTTP-level contract. The body's code is not lost:
+ * it stays on `err.body` for callers that need the precise reason.
+ *
+ * One flat level, no ClientError / ServerError layer in between: "4xx or 5xx?" is answered by
+ * `err.status < 500`, and each narrow catch that matters (re-authenticate, fix permissions,
+ * re-list ids, back off) maps onto exactly one class below.
+ */
+
+/**
+ * 401: not authenticated -- no key, a mistyped key, or a key revoked server-side. Get a new key
+ * (`synchain login`, or `SYNCHAIN_TOKEN` in CI); retrying with the same key cannot succeed.
+ */
+export class AuthError extends ApiError {}
+
+/**
+ * 403: authenticated, but this key / account may not do this (for example the server's
+ * `scope_denied` or `project_scope_denied`). Separate from AuthError because logging in again
+ * does not help: fix the key's scope or use a project it can reach.
+ */
+export class ForbiddenError extends ApiError {}
+
+/**
+ * 404: the target does not exist, or is not visible to this identity -- most often an id prefix
+ * resolved to something since deleted. List again (`files ls`, `calendar ls`) for current ids.
+ */
+export class NotFoundError extends ApiError {}
+
+/**
+ * 409: a valid request that conflicts with current server state (for example
+ * `folder_not_empty`). Change the state first and the same request can succeed -- the opposite
+ * retry strategy to ValidationError, which is why the two stay apart.
+ */
+export class ConflictError extends ApiError {}
+
+/**
+ * 400 / 422: the request itself is wrong -- a missing or malformed parameter, or a business rule
+ * (changing a file extension, an unknown tag, an end before the start). Both statuses share a
+ * class because routes do not draw the line between them consistently.
+ *
+ * The cost of merging them: `instanceof ValidationError` is **not** `status === 422`. A message
+ * that is only true for 422 (files rename: "the extension cannot change" -- the same route's 400
+ * means a malformed request) must keep testing the status explicitly.
+ */
+export class ValidationError extends ApiError {}
+
+/**
+ * 429: rate limited. Apart from 5xx because the back-off differs: wait the stated time here,
+ * versus exponential back-off with jitter for a server fault.
+ */
+export class RateLimitError extends ApiError {}
+
+/**
+ * 5xx: a server or gateway fault, unrelated to the request's content. Only a backed-off retry
+ * helps. The body is often a gateway's HTML error page rather than JSON.
+ */
+export class ServerError extends ApiError {}
+
+/**
+ * The ApiError subclass for an HTTP status. **Every construction site goes through here**
+ * (today: apiFetch and the direct storage fetch in `files download`).
+ *
+ * A stray `new ApiError(...)` produces an error that never satisfies `instanceof NotFoundError`:
+ * nothing fails and no output changes, a caller's narrow catch just never matches. The signature
+ * is exactly `new ApiError(...)`'s, so a call site changes by one word.
+ *
+ * Statuses without a dedicated class (402, 418, 451, codes yet to be used) stay on the base
+ * class rather than being filed under the nearest one: calling a 451 a ForbiddenError would
+ * send the caller off to fix a key scope that has nothing to do with it.
+ */
+export function apiErrorFor(
+  status: number,
+  url: string,
+  body: unknown,
+  message?: string
+): ApiError {
+  switch (status) {
+    case 400:
+    case 422:
+      return new ValidationError(status, url, body, message);
+    case 401:
+      return new AuthError(status, url, body, message);
+    case 403:
+      return new ForbiddenError(status, url, body, message);
+    case 404:
+      return new NotFoundError(status, url, body, message);
+    case 409:
+      return new ConflictError(status, url, body, message);
+    case 429:
+      return new RateLimitError(status, url, body, message);
+  }
+  if (status >= 500) return new ServerError(status, url, body, message);
+  return new ApiError(status, url, body, message);
 }
 
 export interface ApiFetchOptions {
@@ -67,7 +178,8 @@ async function readJsonOrText(res: Response): Promise<unknown> {
 
 /**
  * Fetches a JSON response from the API. Adds an `Authorization: Bearer` header
- * when a token is in config (or passed via opts.token). Throws ApiError on non-2xx.
+ * when a token is in config (or passed via opts.token). Throws an ApiError subclass on non-2xx
+ * (see {@link apiErrorFor}).
  */
 export async function apiFetch<T = unknown>(
   pathOrUrl: string,
@@ -110,7 +222,7 @@ export async function apiFetch<T = unknown>(
 
   if (!res.ok) {
     const parsed = await readJsonOrText(res);
-    throw new ApiError(res.status, url, parsed);
+    throw apiErrorFor(res.status, url, parsed);
   }
 
   const ct = res.headers.get("content-type") ?? "";
