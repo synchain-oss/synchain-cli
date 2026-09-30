@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
@@ -159,13 +159,7 @@ export async function runFoldersLs(
     }
     console.log(renderTree(result.folders));
   } catch (err) {
-    if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -188,13 +182,7 @@ export async function runFoldersMkdir(name: string, flags: FoldersFlags): Promis
       );
     }
   } catch (err) {
-    if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -213,18 +201,14 @@ export async function runFoldersRm(folderId: string, flags: FoldersFlags): Promi
     if (err instanceof ApiError && err.status === 409) {
       const body = err.body as { error?: string } | null;
       if (body?.error === "folder_not_empty") {
-        console.error(pc.red(`Folder is not empty. Delete its files / sub-folders first.`));
-        process.exitCode = 1;
+        reportError(err, {
+          json: wantsJson(flags),
+          message: "Folder is not empty. Delete its files / sub-folders first.",
+        });
         return;
       }
     }
-    if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -239,18 +223,24 @@ export async function runFoldersRename(
     const projectId = resolveActiveProject(cfg, flags.project);
 
     if (!newName || newName.length === 0) {
-      console.error(pc.red("New name cannot be empty."));
-      process.exitCode = 1;
+      reportError(new Error("New name cannot be empty."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
     if (newName.length > 200) {
-      console.error(pc.red("New name is too long (max 200 chars)."));
-      process.exitCode = 1;
+      reportError(new Error("New name is too long (max 200 chars)."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
     if (FOLDER_NAME_FORBIDDEN_RE.test(newName)) {
-      console.error(pc.red("Invalid name — no path separators or control characters."));
-      process.exitCode = 1;
+      reportError(new Error("Invalid name — no path separators or control characters."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
 
@@ -269,20 +259,16 @@ export async function runFoldersRename(
       )
     );
   } catch (err) {
-    if (err instanceof Error && /No folder matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
     if (err instanceof ApiError && err.status === 404) {
       // argv-sourced, so self-inflicted rather than cross-tenant -- sanitized anyway, because an
       // unsanitized exception sitting among sanitized neighbours is how the rule erodes.
-      console.error(pc.red(`Folder ${sanitizeInline(folderId)} not found.`));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: `Folder ${sanitizeInline(folderId)} not found.`,
+      });
       return;
     }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }

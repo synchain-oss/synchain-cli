@@ -10,6 +10,7 @@ import {
   apiErrorFor,
   apiFetch,
   AuthError,
+  buildErrorEnvelope,
   ConflictError,
   ForbiddenError,
   formatApiError,
@@ -25,8 +26,8 @@ import {
  *   1. each status lands in the subclass meant for it (a wrong mapping is worse than none: a
  *      narrow catch would catch the wrong thing);
  *   2. every subclass is still `instanceof ApiError` (every existing catch depends on it);
- *   3. formatApiError prints a subclass exactly as it prints the base class (adding classes
- *      must not change a byte of output).
+ *   3. formatApiError and buildErrorEnvelope print a subclass exactly as they print the base
+ *      class (adding classes must not change a byte of output, text or JSON).
  */
 
 const URL = "https://api.test/api/projects/p/files/f";
@@ -113,6 +114,25 @@ describe("backward compatibility", () => {
         formatApiError(new ApiError(status, URL, body))
       );
     }
+  });
+
+  it("buildErrorEnvelope prints a subclass exactly as it prints the base class", () => {
+    for (const status of [400, 401, 403, 404, 409, 422, 429, 500, 502]) {
+      const body = { error: "some_code", message: "human words" };
+      expect(JSON.stringify(buildErrorEnvelope(apiErrorFor(status, URL, body)))).toBe(
+        JSON.stringify(buildErrorEnvelope(new ApiError(status, URL, body)))
+      );
+    }
+  });
+
+  it("the envelope's code still comes from the response body, never from the class name", () => {
+    // The class is the CLI's grouping by status; the code is the server's own judgement. A code
+    // derived from the class (`forbidden_error`) would no longer match the HTTP API's error table.
+    expect(
+      buildErrorEnvelope(apiErrorFor(403, URL, { error: "project_scope_denied" })).error.code
+    ).toBe("project_scope_denied");
+    // No usable code in the body: http_<status>, not a guessed word such as `not_found`.
+    expect(buildErrorEnvelope(apiErrorFor(404, URL, "<html/>")).error.code).toBe("http_404");
   });
 });
 

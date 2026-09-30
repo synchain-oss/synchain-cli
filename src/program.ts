@@ -7,9 +7,10 @@
  * module is not reachable through the `exports` map, so tests can import `buildProgram` /
  * `main` without them becoming part of the package surface.
  */
-import { Command, Help, Option } from "commander";
+import { Command, CommanderError, Help, Option } from "commander";
 import { createRequire } from "node:module";
 
+import { EXIT_CODES, reportError, wantsStructuredOutput } from "./api.js";
 import { DEFAULT_BASE_URL, isFirstRun, markWelcomeSeen } from "./config.js";
 import { buildHelpJson } from "./help-json.js";
 import { argvWantsJsonOutput, OUTPUT_FORMATS, resolveOutputFormat } from "./output-format.js";
@@ -47,6 +48,7 @@ import {
 import { runNotificationsLs, runNotificationsRead } from "./commands/notifications.js";
 import { runMembersLs } from "./commands/members.js";
 import { runHelp } from "./commands/help.js";
+import { runDoctor } from "./commands/doctor.js";
 import { DOCS_AGENTS, DOCS_README } from "./constants.js";
 
 const require = createRequire(import.meta.url);
@@ -58,8 +60,24 @@ const DOCS_HELP_TEXT =
   "Humans: full reference at\n" +
   `  ${DOCS_README}\n`;
 
-export function buildProgram(): Command {
+/**
+ * @param argv the command line about to be parsed. It only decides how a parse error is written
+ *   (see below); parsing itself still happens in `parseAsync`.
+ */
+export function buildProgram(argv: readonly string[] = process.argv): Command {
   const program = new Command();
+
+  // Parse errors (unknown command or option, a missing value, `--format yaml`) are commander's
+  // own and never reach a command's catch block. Throw them instead of exiting, so main() can
+  // report them like any other failure; and in structured mode keep commander from printing its
+  // prose line, since main() writes the envelope in its place.
+  // Must come before any .command(): a subcommand copies both settings when it is created.
+  program.exitOverride();
+  program.configureOutput({
+    outputError: (str, write) => {
+      if (!wantsStructuredOutput(undefined, argv)) write(str);
+    },
+  });
 
   // `--help --format json`: swap the help *renderer* rather than scanning argv for `-h`/`--help`.
   // By the time commander prints help it has parsed the root's `--format`, so the value can be
@@ -365,11 +383,23 @@ export function buildProgram(): Command {
       await runNotificationsRead(id, opts);
     });
 
+  // -- doctor (offline: never makes a request)
+  program
+    .command("doctor")
+    .description(
+      "Check the local setup offline: config file, stored key shape, base URL, active project"
+    )
+    .option("--json", "Output JSON")
+    .action(async (opts) => {
+      await runDoctor({ json: Boolean(opts.json) });
+    });
+
   // -- help
   program
     .command("help [topic]")
     .description(
-      "Rich help per topic (login, project, files, folders, calendar, discussion, members)"
+      "Rich help per topic (login, project, files, folders, calendar, discussion, members, " +
+        "notifications, doctor)"
     )
     .action((topic: string | undefined) => {
       runHelp(topic);
@@ -392,6 +422,32 @@ export async function main(argv: string[] = process.argv): Promise<void> {
       // Non-fatal — worst case, the banner shows again next run.
     }
   }
-  const program = buildProgram();
-  await program.parseAsync(argv);
+  const program = buildProgram(argv);
+  try {
+    await program.parseAsync(argv);
+  } catch (err) {
+    if (!(err instanceof CommanderError)) throw err;
+    // --help and --version arrive here as exit-code-0 CommanderErrors under exitOverride().
+    if (err.exitCode === 0) return;
+    // A bare `synchain`, or a command group without a subcommand (`synchain files`), has already
+    // printed its help as the error report; an envelope on top would be a second record of it.
+    if (err.code !== "commander.help" && wantsStructuredOutput(undefined, argv)) {
+      reportError(new Error(err.message.replace(/^error: /, "")), {
+        json: true,
+        code: commanderCode(err.code),
+      });
+    }
+    process.exitCode = EXIT_CODES.usage;
+  }
+}
+
+/**
+ * commander's error code as an envelope code: `commander.unknownOption` -> `unknown_option`.
+ * Derived rather than tabled, so a parse error commander adds later still gets a stable name.
+ */
+function commanderCode(code: string): string {
+  return code
+    .replace(/^commander\./, "")
+    .replace(/([A-Z])/g, "_$1")
+    .toLowerCase();
 }

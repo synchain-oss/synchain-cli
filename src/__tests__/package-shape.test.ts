@@ -161,6 +161,8 @@ describe("built package (dist/)", () => {
     for (const name of ERROR_CLASSES) expect(dts).toContain(name);
     expect(dts).toContain("OutputFormat");
     expect(dts).toContain("CommandTree");
+    // The shape of the JSON error line on stderr, for consumers that parse it.
+    expect(dts).toContain("ErrorEnvelope");
     expect(dts).not.toMatch(/function\s+(main|buildProgram)\b/);
     expect(dts).not.toMatch(/export\s*\{[^}]*\b(main|buildProgram)\b[^}]*\}/);
   }, 180_000);

@@ -30,6 +30,29 @@
 
 import { sanitizeInline, shortId } from "./sanitize.js";
 
+/**
+ * Why an id could not be settled, as the JSON error envelope's `code`.
+ *   - `id_not_found`: nothing matches (exit 5, like a 404: use another id);
+ *   - `ambiguous_id`: more than one record matches (exit 2: pass more of the id);
+ *   - `no_project_selected`: no project given at all (exit 2: pass `--project`).
+ */
+export type IdResolutionCode = "id_not_found" | "ambiguous_id" | "no_project_selected";
+
+/**
+ * The id a command should act on could not be settled. A class of its own so that `reportError`
+ * can tell it from a local IO failure: both are plain `Error`s otherwise, and both would end up
+ * as `client_error` with exit code 1, which tells an agent nothing about what to do next.
+ */
+export class IdResolutionError extends Error {
+  readonly code: IdResolutionCode;
+
+  constructor(message: string, code: IdResolutionCode) {
+    super(message);
+    this.name = "IdResolutionError";
+    this.code = code;
+  }
+}
+
 /** Canonical 36-char UUID (the id shape Synchain stores for every record). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -80,15 +103,19 @@ export async function resolveByPrefix<T extends { id: string }>(
   const matches = all.filter((x) => x.id.startsWith(input));
   if (matches.length === 1) return matches[0]!;
   // Echoed back sanitized, for the same reason the three messages in `resolveProjectRef` are:
-  // these travel to the terminal through each command's `console.error(pc.red(err.message))`,
-  // which does **not** go through `formatApiError` and so gets none of its sanitizing. `input`
+  // in text mode `reportError` prints an error's message as is -- `formatApiError` sanitizes
+  // only an ApiError's body, so a message like this one gets none of that. `input`
   // is argv (self-inflicted rather than cross-tenant), but two resolvers in one file disagreeing
   // about whether their echoed input is safe is worse than either answer on its own.
   if (matches.length === 0) {
-    throw new Error(`No ${label} matches "${sanitizeInline(input)}".`);
+    throw new IdResolutionError(
+      `No ${label} matches "${sanitizeInline(input)}".`,
+      "id_not_found"
+    );
   }
-  throw new Error(
-    `${label} prefix "${sanitizeInline(input)}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`
+  throw new IdResolutionError(
+    `${label} prefix "${sanitizeInline(input)}" is ambiguous (matches ${matches.length}). Use more characters or the full UUID.`,
+    "ambiguous_id"
   );
 }
 
@@ -233,7 +260,10 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
     // result, so no request is actually saved -- the ordering is about keeping argument
     // validation separate from lookup failure, and about a lazy `fetchAll` costing nothing.)
     // The message quotes `raw`, the same string the two ambiguity errors below quote.
-    throw new Error(`No project matches "${sanitizeInline(raw)}".`);
+    throw new IdResolutionError(
+      `No project matches "${sanitizeInline(raw)}".`,
+      "id_not_found"
+    );
   }
 
   const all = await fetchAll();
@@ -254,8 +284,9 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       // first (the same stance as the ambiguity branch in `resolveByPrefix`). The wording
       // deliberately differs from the UUID one — the next action differs too, since there
       // are no "more characters" to add here.
-      throw new Error(
-        `Custom ID "${sanitizeInline(raw)}" is ambiguous (matches ${hits.length} projects). Use the full UUID instead.`
+      throw new IdResolutionError(
+        `Custom ID "${sanitizeInline(raw)}" is ambiguous (matches ${hits.length} projects). Use the full UUID instead.`,
+        "ambiguous_id"
       );
     }
     if (hits.length === 1) {
@@ -297,12 +328,13 @@ export async function resolveProjectRef<T extends ProjectRefRecord>(
       // a failure to fold yields `No project matches`, whereas here it yields a *result*.)
       const shadowed = all.filter((p) => p !== hit && (slugKeyOf(p.id) ?? "").startsWith(wantedSlug));
       if (shadowed.length > 0) {
-        throw new Error(
+        throw new IdResolutionError(
           `"${sanitizeInline(raw)}" is ambiguous: it is the custom ID of project ${sanitizeInline(
             hit.id
           )} and also a UUID prefix of ${shadowed
             .map((p) => sanitizeInline(p.id))
-            .join(", ")}. Use the full UUID instead.`
+            .join(", ")}. Use the full UUID instead.`,
+          "ambiguous_id"
         );
       }
       return hit;

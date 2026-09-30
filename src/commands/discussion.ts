@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
@@ -242,8 +242,7 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
     const footer = paginationFooter(res.offset, res.posts.length, res.total, res.limit);
     if (footer) console.log(pc.dim(footer));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -293,8 +292,7 @@ export async function runDiscussionRead(postId: string, flags: DiscussionFlags):
 
     console.log(renderThread(effectiveRoot, posts));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -324,16 +322,20 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
   const cfg = await loadConfig();
   try {
     if (!flags.title || !flags.title.trim()) {
-      console.error(pc.red("--title is required and must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--title is required and must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const category = validateCategory(flags.category);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
-      console.error(pc.red("--content must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--content must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
 
@@ -349,8 +351,7 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -364,8 +365,10 @@ export async function runDiscussionReply(
     const projectId = resolveActiveProject(cfg, flags.project);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
-      console.error(pc.red("--content must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--content must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
 
@@ -390,17 +393,13 @@ export async function runDiscussionReply(
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`Parent post ${sanitizeInline(parentPostId)} not found.`));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: `Parent post ${sanitizeInline(parentPostId)} not found.`,
+      });
       return;
     }
-    if (err instanceof Error && /No post matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }

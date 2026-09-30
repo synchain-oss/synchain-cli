@@ -24,6 +24,13 @@ export interface ProgressOptions {
   label?: string;
   /** Render to stderr by default (so stdout stays parseable). */
   stream?: NodeJS.WriteStream;
+  /**
+   * Write nothing at all, not even the completion message. For structured stderr (`--json`,
+   * `--format json`, or a stderr that is not a terminal), where every stderr line has to parse as
+   * JSON: the non-TTY path would still write `finish(message)` as a line of prose. The message
+   * adds nothing a machine reader lacks either -- the result itself is on stdout.
+   */
+  quiet?: boolean;
 }
 
 export class Progress {
@@ -32,6 +39,7 @@ export class Progress {
   private readonly label: string;
   private readonly stream: NodeJS.WriteStream;
   private readonly enabled: boolean;
+  private readonly quiet: boolean;
   private lastRender = 0;
   private done = false;
 
@@ -39,7 +47,8 @@ export class Progress {
     this.total = opts.total;
     this.label = opts.label ?? "";
     this.stream = opts.stream ?? process.stderr;
-    this.enabled = Boolean(this.stream.isTTY);
+    this.quiet = Boolean(opts.quiet);
+    this.enabled = Boolean(this.stream.isTTY) && !this.quiet;
   }
 
   add(bytes: number): void {
@@ -78,7 +87,7 @@ export class Progress {
       return;
     }
     // Non-TTY (CI, pipes): we never emitted progress lines, but the caller's
-    // completion message must still surface.
-    if (message) this.stream.write(`${message}\n`);
+    // completion message must still surface -- unless quiet (see ProgressOptions.quiet).
+    if (message && !this.quiet) this.stream.write(`${message}\n`);
   }
 }
