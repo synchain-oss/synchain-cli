@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
+import pc from "picocolors";
+
 import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
+import { argvWantsJsonOutput } from "./output-format.js";
 import { sanitizeBlock } from "./util/sanitize.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 
@@ -93,7 +96,8 @@ export class ServerError extends ApiError {}
 
 /**
  * The ApiError subclass for an HTTP status. **Every construction site goes through here**
- * (today: apiFetch and the direct storage fetch in `files download`).
+ * (today: apiFetch, and the two direct storage requests in `files`: the download fetch and the
+ * upload PUT).
  *
  * A stray `new ApiError(...)` produces an error that never satisfies `instanceof NotFoundError`:
  * nothing fails and no output changes, a caller's narrow catch just never matches. The signature
@@ -337,4 +341,251 @@ export function formatApiError(err: unknown): string {
 /** Returns true if the --json flag is set. Centralized so commands share a convention. */
 export function wantsJson(opts: { json?: boolean } | undefined): boolean {
   return Boolean(opts?.json);
+}
+
+/**
+ * Whether stderr should carry JSON when the invocation itself did not ask for it.
+ *
+ * `SYNCHAIN_ERROR_FORMAT=json|text` decides outright. Otherwise the stream decides: a stderr
+ * that is not a terminal is a pipe, a file or an agent harness -- something that parses, not a
+ * person reading colours. Any other value of the variable is not a decision, so the stream
+ * decides then too.
+ */
+export function stderrPrefersJson(env: NodeJS.ProcessEnv = process.env): boolean {
+  const forced = env.SYNCHAIN_ERROR_FORMAT?.trim().toLowerCase();
+  if (forced === "json") return true;
+  if (forced === "text") return false;
+  return process.stderr.isTTY !== true;
+}
+
+/**
+ * Whether this run's stderr is read by a machine. Then an error is one JSON envelope line, a
+ * warning is one `{"warning":{…}}` line, and progress output is not written at all -- so every
+ * line on stderr parses as JSON.
+ *
+ * Precedence: an explicit `--json` / `--format json` wins, then `SYNCHAIN_ERROR_FORMAT`, then
+ * whether stderr is a terminal. A flag is a decision about this one invocation; the variable is
+ * ambient, so it only replaces the terminal check.
+ *
+ * argv is scanned as well as the flags because `login`, `logout`, `project use`,
+ * `files download`, `files rm`, `folders rm` and `calendar rm` declare no `--json`: they have no
+ * JSON form of their normal output, but they can still fail, and an agent driving everything
+ * with `--format json` should not get prose from exactly those.
+ *
+ * Known limit: before parsing, argv cannot tell an option from an option value that happens to
+ * read `--json` (`discussion post --title --json`). Such a run's errors come out as JSON; that
+ * changes the shape of an error, never whether the command runs.
+ */
+export function wantsStructuredOutput(
+  flags?: { json?: boolean },
+  argv: readonly string[] = process.argv
+): boolean {
+  return wantsJson(flags) || argvWantsJsonOutput(argv) || stderrPrefersJson();
+}
+
+/**
+ * The one line written to stderr when a command fails in structured mode.
+ *
+ * Deliberately not RFC 9457 `application/problem+json`: that is a format for HTTP response
+ * bodies, where `type` must be a dereferenceable URI and `instance` names the request. On a CLI's
+ * stderr those could only be made up. A caller needs a line that parses and a code to switch on.
+ *
+ * All four fields are always present, so a caller can read `.error.code` / `.error.status`
+ * without checking first.
+ */
+export interface ErrorEnvelope {
+  error: {
+    /**
+     * The server's snake_case `error` field when the response has one; otherwise
+     * `http_<status>`, `network_error` (no response at all) or a code the CLI assigns to its own
+     * checks (`unknown_option`, `missing_argument`, `unauthenticated`, `client_error`, ...).
+     */
+    code: string;
+    /** The HTTP status; 0 when no response was received (network, local IO, input checks). */
+    status: number;
+    /** The request URL; "" when no request was made. A presigned URL appears without its query. */
+    url: string;
+    /** Human-readable explanation, the same sentence text mode prints. Sanitized, capped. */
+    detail: string;
+  };
+}
+
+/**
+ * Cap on `detail`. A 5xx body is often a gateway's full HTML error page, tens of KB. In text mode
+ * that only floods the terminal; in JSON mode it can break the reader: a line-oriented consumer
+ * may choke on the line length, and a log pipeline may cut it -- and half a JSON line fails to
+ * parse with an error that has nothing to do with the real failure.
+ */
+const ERROR_DETAIL_MAX_CHARS = 2000;
+
+function truncateDetail(detail: string): string {
+  return detail.length <= ERROR_DETAIL_MAX_CHARS
+    ? detail
+    : `${detail.slice(0, ERROR_DETAIL_MAX_CHARS)}… (truncated)`;
+}
+
+/**
+ * The snake_case `error` field of an API response body, used as the envelope's code.
+ *
+ * The API's routes already answer `{ "error": "invalid_project_id" }`, so that value is reused
+ * rather than a second status-to-code table kept here: such a table would need an update for
+ * every new server code, and a code that disagrees with the server's is worse than none.
+ *
+ * Only `^[a-z][a-z0-9_]*$` counts. Gateways and some older routes put a sentence, even HTML, in
+ * the same slot; that is not something a caller can switch on. It still reaches `detail`.
+ */
+function apiErrorCode(body: unknown): string | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const raw = (body as { error?: unknown }).error;
+  if (typeof raw !== "string") return null;
+  return /^[a-z][a-z0-9_]*$/.test(raw) ? raw : null;
+}
+
+/** The server's `message` when there is one, else the raw body, else the Error message. */
+function apiErrorDetail(err: ApiError): string {
+  const { body } = err;
+  if (typeof body === "string" && body.trim()) return body.trim();
+  if (body && typeof body === "object") {
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+    return JSON.stringify(body);
+  }
+  return err.message;
+}
+
+/**
+ * A request that never got a response: DNS, a refused or reset connection, TLS (undici reports
+ * all of them as `TypeError: fetch failed`), or apiFetch's timeout (`TimeoutError`).
+ */
+function isNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "TimeoutError" || err.name === "AbortError") return true;
+  return err instanceof TypeError && err.message === "fetch failed";
+}
+
+/**
+ * Wraps any failure in an ErrorEnvelope.
+ *
+ * `override.detail` lets a command put its own sentence ("Folder is not empty. …") in the
+ * envelope, so text and JSON say the same thing; `override.code` replaces the code (a failed
+ * storage PUT is `storage_put_failed`, not whatever the storage host's body says).
+ */
+export function buildErrorEnvelope(
+  err: unknown,
+  override: { code?: string; detail?: string } = {}
+): ErrorEnvelope {
+  if (err instanceof ApiError) {
+    return {
+      error: {
+        // The fallback deliberately does not guess the server's vocabulary (403 -> `forbidden`,
+        // 404 -> `not_found`): those are codes the server really sends, and a guessed one would be
+        // indistinguishable from a real one. `http_` says "this is only the HTTP status".
+        code: override.code ?? apiErrorCode(err.body) ?? `http_${err.status}`,
+        status: err.status,
+        url: err.url,
+        // Sanitized although JSON.stringify escapes ESC as \u001b: a caller that parses the
+        // envelope and echoes `detail` to a terminal or a log gets the raw byte back.
+        detail: truncateDetail(sanitizeBlock(override.detail ?? apiErrorDetail(err))),
+      },
+    };
+  }
+  // No HTTP response: network failures, local IO, an ambiguous or unmatched id prefix, the CLI's
+  // own input checks. Status 0 rather than a missing field keeps all four fields present.
+  const detail = override.detail ?? (err instanceof Error ? err.message : String(err));
+  return {
+    error: {
+      code: override.code ?? (isNetworkError(err) ? "network_error" : "client_error"),
+      status: 0,
+      url: "",
+      detail: truncateDetail(sanitizeBlock(detail)),
+    },
+  };
+}
+
+/**
+ * Exit-code categories. 1 stays the catch-all, so "non-zero means failure" keeps working for a
+ * script that never looks at the number.
+ */
+export const EXIT_CODES = {
+  ok: 0,
+  error: 1,
+  usage: 2,
+  auth: 3,
+  forbidden: 4,
+  notFound: 5,
+  invalid: 6,
+  rateLimited: 7,
+  server: 8,
+} as const;
+
+/**
+ * Codes of failures the CLI detects in the command line itself, before or instead of a request:
+ * commander's parse errors (named after its own error codes) and the commands' input checks.
+ */
+const USAGE_CODES = new Set([
+  "unknown_command",
+  "unknown_option",
+  "invalid_argument",
+  "missing_argument",
+  "missing_mandatory_option_value",
+  "option_missing_argument",
+  "excess_arguments",
+  "conflicting_option",
+  "missing_option",
+  "invalid_option",
+  "invalid_name",
+  "invalid_time_range",
+  "nothing_to_update",
+  "unknown_topic",
+  "insecure_base_url",
+]);
+
+/**
+ * The exit code for a failure: by ApiError class first (never by comparing status numbers here --
+ * the classes are the one mapping from status to category), then by the envelope code for the
+ * CLI's own failures.
+ */
+export function exitCodeFor(err: unknown, code?: string): number {
+  if (err instanceof AuthError) return EXIT_CODES.auth;
+  if (err instanceof ForbiddenError) return EXIT_CODES.forbidden;
+  if (err instanceof NotFoundError) return EXIT_CODES.notFound;
+  if (err instanceof ConflictError || err instanceof ValidationError) return EXIT_CODES.invalid;
+  if (err instanceof RateLimitError) return EXIT_CODES.rateLimited;
+  if (err instanceof ServerError) return EXIT_CODES.server;
+  if (code === "unauthenticated") return EXIT_CODES.auth;
+  if (code !== undefined && USAGE_CODES.has(code)) return EXIT_CODES.usage;
+  return EXIT_CODES.error;
+}
+
+/**
+ * The one exit for every command's failure path: sets `process.exitCode` by category, then
+ * writes the envelope (structured mode) or the red prose line (text mode, unchanged from before).
+ *
+ * `message` is the command's own sentence ("Folder is not empty. …"): the text line and the
+ * envelope's `detail` both use it. `code` names a failure the CLI detected itself, or replaces
+ * the server's code.
+ *
+ * ⚠ A call site is `reportError(...); return;` -- never `process.exit()`. Exiting right after a
+ * `fetch()` makes libuv assert on Windows while undici's socket is still closing
+ * (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`), printed to stderr with exit code
+ * 127: a non-JSON line and a wrong exit code at once. Setting `process.exitCode` lets the event
+ * loop drain and the process end with the right code. The `return` matters for the same reason:
+ * unlike `process.exit()`, setting a code does not stop the function.
+ *
+ * The envelope goes to stderr, not stdout: stdout carries only a command's result, so a `--json`
+ * consumer never has to tell a result from an error in the same stream.
+ */
+export function reportError(
+  err: unknown,
+  opts: { json?: boolean; message?: string; code?: string } = {}
+): void {
+  process.exitCode = exitCodeFor(err, opts.code);
+  if (wantsStructuredOutput(opts)) {
+    const envelope = buildErrorEnvelope(err, { code: opts.code, detail: opts.message });
+    // One line, not indented: an envelope is read line by line or forwarded into a log, and a
+    // single line is always a complete record.
+    process.stderr.write(`${JSON.stringify(envelope)}\n`);
+    return;
+  }
+  console.error(pc.red(opts.message ?? formatApiError(err)));
 }

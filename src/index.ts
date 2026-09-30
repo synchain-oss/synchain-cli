@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
+import { reportError } from "./api.js";
+
 // Invoke only when run as a script (not when imported by tests). Resolve both
 // sides to real, absolute paths before comparing — argv[1] can be relative or a
 // symlink (e.g. under `npm link`), otherwise the CLI silently exits with code 0.
@@ -30,17 +32,18 @@ if (invokedAsScript) {
   import("./program.js")
     .then(({ main }) => main())
     .catch((err) => {
-      console.error(err instanceof Error ? err.message : err);
-      // 不用 process.exit(1):强制退出会跳过事件循环排水,undici 连接/uv handle 在 Windows 上
-      // 触发 libuv 竞态断言(exit-crash)。设 exitCode 让事件循环排空后按码自然退出。
-      process.exitCode = 1;
+      // 没有被任何命令接住的异常也走 reportError:结构化模式下同样是一行信封。
+      // reportError 只设 process.exitCode、不调 process.exit():强制退出会跳过事件循环排水,
+      // undici 连接/uv handle 在 Windows 上触发 libuv 竞态断言(exit-crash)。
+      reportError(err);
       return;
     });
 }
 
 /**
- * The public API of `@synchain/cli`: the typed error hierarchy, the `--format` values, and the
- * shape of `--help --format json`. `exports` opens only `.` and `./package.json`, so anything
+ * The public API of `@synchain/cli`: the typed error hierarchy, the `--format` values, the
+ * shape of `--help --format json`, and the shape of the JSON error line on stderr
+ * (`ErrorEnvelope`). `exports` opens only `.` and `./package.json`, so anything
  * not re-exported here exists in dist/ but cannot be imported by anyone. The CLI's own wiring
  * is deliberately not re-exported: once exported it would be API to keep stable.
  */
@@ -54,5 +57,6 @@ export {
   RateLimitError,
   ServerError,
 } from "./api.js";
+export type { ErrorEnvelope } from "./api.js";
 export type { OutputFormat } from "./output-format.js";
 export type { CommandTree, CommandTreeNode, CommandTreeOption } from "./help-json.js";

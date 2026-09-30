@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, ApiError, formatApiError } from "../api.js";
+import { apiFetch, ApiError, formatApiError, reportError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";
 import { promptPassword, promptText } from "../util/prompt.js";
 import { sanitizeInline } from "../util/sanitize.js";
@@ -45,8 +45,7 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
   if (!baseUrl) {
     baseUrl = await promptText("Base URL", { initial: existing.baseUrl ?? DEFAULT_BASE_URL });
     if (!baseUrl) {
-      console.error(pc.red("Login cancelled."));
-      process.exitCode = 1;
+      reportError(new Error("Login cancelled."), { code: "login_cancelled" });
       return;
     }
   }
@@ -56,8 +55,7 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
   try {
     assertSafeBaseUrl(baseUrl);
   } catch (e) {
-    console.error(pc.red(e instanceof Error ? e.message : String(e)));
-    process.exitCode = 1;
+    reportError(e, { code: "insecure_base_url" });
     return;
   }
 
@@ -70,8 +68,7 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
   if (!token) {
     token = await promptPassword("CLI key (input hidden, from Settings → CLI Access)");
     if (!token) {
-      console.error(pc.red("Login cancelled."));
-      process.exitCode = 1;
+      reportError(new Error("Login cancelled."), { code: "login_cancelled" });
       return;
     }
   }
@@ -100,13 +97,14 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      console.error(pc.red("Login failed: invalid CLI key."));
+      reportError(err, { message: "Login failed: invalid CLI key." });
     } else if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red("Login failed: /api/user/me not found. Is the server up to date?"));
+      reportError(err, {
+        message: "Login failed: /api/user/me not found. Is the server up to date?",
+      });
     } else {
-      console.error(pc.red(`Login failed: ${formatApiError(err)}`));
+      reportError(err, { message: `Login failed: ${formatApiError(err)}` });
     }
-    process.exitCode = 1;
     return;
   }
 }

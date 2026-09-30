@@ -157,10 +157,19 @@ describe("global --format on the real program", () => {
   it("rejects a value outside OUTPUT_FORMATS through commander's choices check", async () => {
     const filesMod = await import("../commands/files.js");
     const before = (filesMod.runFilesLs as Mock).mock.calls.length;
-    const { err, error } = await run(["--format", "yaml", "files", "ls"]);
-    expect(error).toBeInstanceOf(CommanderError);
-    expect((error as CommanderError).code).toBe("commander.invalidArgument");
-    expect(err).toMatch(/Allowed choices are text, json/);
+    // Text mode, where commander prints its own message (a non-TTY stderr would get the JSON
+    // envelope from main() instead; exit-codes.test.ts covers that path).
+    const saved = process.env.SYNCHAIN_ERROR_FORMAT;
+    process.env.SYNCHAIN_ERROR_FORMAT = "text";
+    try {
+      const { err, error } = await run(["--format", "yaml", "files", "ls"]);
+      expect(error).toBeInstanceOf(CommanderError);
+      expect((error as CommanderError).code).toBe("commander.invalidArgument");
+      expect(err).toMatch(/Allowed choices are text, json/);
+    } finally {
+      if (saved === undefined) delete process.env.SYNCHAIN_ERROR_FORMAT;
+      else process.env.SYNCHAIN_ERROR_FORMAT = saved;
+    }
     expect((filesMod.runFilesLs as Mock).mock.calls.length).toBe(before);
   });
 });

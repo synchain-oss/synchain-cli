@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, formatApiError, wantsJson } from "../api.js";
+import { apiFetch, reportError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, shortId, safeNumber } from "../util/sanitize.js";
@@ -90,8 +90,7 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     }
     console.log(pc.dim(`${safeNumber(res.unreadCount)} unread`));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -132,8 +131,10 @@ export async function runNotificationsRead(
     }
 
     if (!id) {
-      console.error(pc.red("Provide a notification id, or use --all to mark everything read."));
-      process.exitCode = 1;
+      reportError(new Error("Provide a notification id, or use --all to mark everything read."), {
+        json: wantsJson(flags),
+        code: "missing_argument",
+      });
       return;
     }
 
@@ -150,13 +151,7 @@ export async function runNotificationsRead(
       console.log(pc.dim(`${shortId(resolvedId)} was already read (or not found).`));
     }
   } catch (err) {
-    if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
