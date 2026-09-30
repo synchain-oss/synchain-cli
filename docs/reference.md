@@ -49,9 +49,10 @@ update after pulling changes, re-run `npm run build`.
    synchain login
    ```
 
-   You are prompted for the **base URL** (default `https://www.synchain.ca`) and the
-   **CLI key** (hidden input). The key is verified against `GET /api/user/me` and, on
-   success, stored locally.
+   On a terminal you are prompted for the **base URL** (default `https://www.synchain.ca`)
+   and the **CLI key** (hidden input). The key is verified against `GET /api/user/me` and,
+   on success, stored locally. Scripts and agents skip both prompts — see
+   [Non-interactive / CI / agents](#non-interactive--ci--agents).
 
 ### Base URL
 
@@ -64,21 +65,28 @@ synchain login --base-url http://127.0.0.1:8787    # e.g. a local mock server
 ```
 
 `https://` is accepted for any host; plain `http://` only for `localhost`, `127.0.0.1` and
-`::1`, so a key never crosses the network in cleartext. The value is saved in the config and
-reused by later commands. (If you later log in to a different base URL, the remembered active
-project is cleared so stale ids can't leak across hosts.)
+`::1`, so a key never crosses the network in cleartext. A URL with credentials in it
+(`https://user:pass@…`) is refused, and the error does not repeat them. The value is saved in
+the config and reused by later commands. (If you later log in to a different base URL, the
+remembered active project is cleared so stale ids can't leak across hosts.)
 
 ### Non-interactive / CI / agents
 
-Set `SYNCHAIN_TOKEN` in the environment to skip the hidden prompt:
+When stdin is not a terminal (CI, an agent harness, `</dev/null`), `login` never prompts. The
+key comes from `SYNCHAIN_TOKEN`:
 
 ```bash
-SYNCHAIN_TOKEN=synch_live_sk_… synchain login --base-url https://www.synchain.ca
+SYNCHAIN_TOKEN=synch_live_sk_… synchain login
 ```
 
-`--base-url` here is the default spelled out: `login` still asks for the base URL when it is
-not given, and a script cannot answer that prompt. Run `synchain doctor` afterwards to confirm
-a key was stored (see [`synchain doctor`](#synchain-doctor)).
+The base URL is `--base-url` when given, else the one already stored, else the default
+`https://www.synchain.ca`. When it reuses a stored base URL other than the default, `login`
+says so on stdout before sending the key (`Using stored base URL … (pass --base-url to
+override).`), so a key going to a leftover test host shows up in the log.
+
+Without `SYNCHAIN_TOKEN`, a `login` whose stdin is not a terminal sends nothing and fails with a
+usage error: exit `2`, code `missing_argument`. Run `synchain doctor` afterwards to confirm a key
+was stored (see [`synchain doctor`](#synchain-doctor)).
 
 `SYNCHAIN_TOKEN` is read by `synchain login` **only**; every other command uses the key that
 `login` stored. The key is **never** accepted as a command-line flag — argv ends up in shell
@@ -140,16 +148,16 @@ Three things worth knowing about custom IDs:
 
 Help: `synchain help`, `synchain help <topic>`, `synchain <group> --help`, and
 `synchain --help --format json` for the whole command tree as JSON
-([Machine-readable help](#machine-readable-help)). Read commands, the `rm` commands and
-every command that takes `--dry-run` accept `--json`; `--format json` does the same for any
-command ([Global options](#global-options)). Every command that changes remote data accepts
-`--dry-run` ([Dry runs](#dry-runs)).
+([Machine-readable help](#machine-readable-help)). Every command except `login`, `logout`,
+`project use`, `files download` and `help` accepts `--json`; `--format json` turns it on from
+any position ([Global options](#global-options)). Every command that changes remote data
+accepts `--dry-run` ([Dry runs](#dry-runs)).
 
 ### Auth
 
 ```bash
 synchain login [--base-url <url>]
-synchain logout [--yes]
+synchain logout [--yes]       # --yes skips the confirmation; without a terminal there is none
 synchain whoami [--json]
 synchain doctor [--json]      # offline preflight, no request (see `synchain doctor` below)
 ```
@@ -175,9 +183,10 @@ synchain files rm <fileId> [--yes] [--project <p>] [--json] [--dry-run]
   name (never a path).
 - **mv `--to root`** — moves the file out of any folder.
 - **rename** — the extension must stay the same (the server returns 422 otherwise).
-- **rm** — asks for confirmation; pass `--yes` to skip (for scripts). `--dry-run` shows
-  which file an id prefix resolved to, without asking and without deleting; with `--json`
-  a real delete prints `{ "deleted": { "id", "name" } }`.
+- **rm** — asks for confirmation; pass `--yes` to skip it. A script **must** pass `--yes`:
+  with no terminal to answer the prompt, nothing is deleted and the exit code is still `0`.
+  `--dry-run` shows which file an id prefix resolved to, without asking and without deleting;
+  with `--json` a real delete prints `{ "deleted": { "id", "name" } }`.
 
 ```bash
 synchain files upload ./mix.wav
@@ -345,18 +354,19 @@ error on stderr — as a single JSON line whenever stderr is not a terminal (see
 
 ## Global options
 
-`--format` belongs to the root command, so it works in any position:
+Only `--format` is global. It belongs to the root command, so it works in any position:
 `synchain --format json files ls` and `synchain files ls --format json` are the same call.
-The other rows are per-command options that every script meets sooner or later.
+The other rows are per-command options that every script meets sooner or later; passing one
+to a command that does not declare it is an unknown option (exit `2`).
 
 | Option | Accepted by | Effect |
 | --- | --- | --- |
-| `--format json\|text` | every command (default `text`) | `json` turns on `--json` for every command that has it, switches errors to the [JSON envelope](#errors), and makes `--help` print the [command tree](#machine-readable-help). Any other value is a usage error (exit `2`). |
-| `--json` | read commands, the three `rm` commands, every command that accepts `--dry-run`, `doctor` | Machine-readable stdout for that one command. Unchanged, so existing scripts keep working. |
+| `--format json\|text` | every command, in any position (default `text`) | `json` turns on `--json` for every command that has it, switches errors to the [JSON envelope](#errors), and makes `--help` print the [command tree](#machine-readable-help). Any other value is a usage error (exit `2`, code `invalid_argument`). |
+| `--json` | every command except `login`, `logout`, `project use`, `files download` and `help` | Machine-readable stdout for that one command. Unchanged, so existing scripts keep working. |
 | `--dry-run` | the 13 commands listed under [Dry runs](#dry-runs) | Rehearse the command; no write is sent. |
 | `--base-url <url>` | `login` | Which deployment to talk to (default `https://www.synchain.ca`). Saved to the config, so every later command uses it. See [Base URL](#base-url). |
-| `--project <id>` | project-scoped commands | The project for this one call — a full UUID only (see [Projects](#projects)). |
-| `--yes` | `files rm`, `logout` | Skip the confirmation prompt. Scripts need it: with no terminal to answer, the prompt cancels the command. |
+| `--project <id>` | the `files`, `folders`, `calendar`, `discussion` and `members` commands | The project for this one call — a full UUID only (see [Projects](#projects)). |
+| `--yes` | `files rm`, `logout` | Skip the confirmation prompt. A script deleting a file needs it: without a terminal and without `--yes`, `files rm` deletes nothing and still exits `0`. `logout` does not ask when stdin is not a terminal. |
 
 Environment variables:
 
@@ -376,7 +386,9 @@ synchain --help --format json | jq -r '.commands[].name'
 ```
 
 In JSON mode `--help` on any subcommand prints the same whole tree, so one call is enough to
-discover every command. Without `--format json`, `--help` prints the usual text.
+discover every command. Without `--format json`, `--help` prints the usual text. Ask with
+`--help`: a bare `synchain`, or a group without a subcommand (`synchain files`), prints help
+too, but on **stderr** and with exit `2` — a missing command is a usage error.
 
 Every node in the tree has these fields:
 
@@ -401,27 +413,27 @@ happens to be `-h` (e.g. `discussion post --title -h …`) is a value, and the c
 
 Every command that changes remote data accepts `--dry-run`:
 
-| Command | `action` |
-| --- | --- |
-| `files upload` | `files.upload` |
-| `files mv` | `files.mv` |
-| `files rename` | `files.rename` |
-| `files rm` | `files.rm` |
-| `folders mkdir` | `folders.mkdir` |
-| `folders rename` | `folders.rename` |
-| `folders rm` | `folders.rm` |
-| `calendar add` | `calendar.add` |
-| `calendar edit` | `calendar.edit` |
-| `calendar rm` | `calendar.rm` |
-| `discussion post` | `discussion.post` |
-| `discussion reply` | `discussion.reply` |
-| `notifications read` | `notifications.read` |
+| Command | `action` | `target` fields |
+| --- | --- | --- |
+| `files upload` | `files.upload` | `project`, `localPath`, `file` (name, size, mimeType), `folderId`, `storageKey` |
+| `files mv` | `files.mv` | `project`, `file` (id, name, folderId), `to` (the destination folder id, or null for root) |
+| `files rename` | `files.rename` | `project`, `file` (id, name), `newName` |
+| `files rm` | `files.rm` | `project`, `file` (id, name, size, folderId) |
+| `folders mkdir` | `folders.mkdir` | `project`, `name`, `parentId` |
+| `folders rename` | `folders.rename` | `project`, `folder` (id, name), `newName` |
+| `folders rm` | `folders.rm` | `project`, `folder` (id, name) |
+| `calendar add` | `calendar.add` | `project`, `event` (the body it would POST) |
+| `calendar edit` | `calendar.edit` | `project`, `event` (id, title, tag), `changes` (the body it would PATCH) |
+| `calendar rm` | `calendar.rm` | `project`, `event` (id) |
+| `discussion post` | `discussion.post` | `project`, `title`, `category`, `contentChars`, `contentPreview` |
+| `discussion reply` | `discussion.reply` | `project`, `parentId`, `contentChars`, `contentPreview` |
+| `notifications read` | `notifications.read` | `scope` ("one" or "all"), then `notification` (id) or `unreadCount` |
 
 A dry run does everything the real command does up to the write — validates the arguments,
 resolves id prefixes to the full record, builds the request — then prints what it would have
 done and exits `0`. It never sends a write; the only requests it makes are the read-only
-lookups the real run makes too. `files rm --dry-run` stops before the confirmation prompt, so
-it needs no `--yes`.
+lookups the real run makes too, so a dry run that looks something up needs a valid key and the
+right scopes. `files rm --dry-run` stops before the confirmation prompt, so it needs no `--yes`.
 
 This matters most for id prefixes: an 8-character prefix copied from the wrong place resolves
 to a different record without any error. A dry run shows which record — id **and** name — the
@@ -431,7 +443,7 @@ Text output (stdout):
 
 ```text
 [dry-run] would delete mix.wav (3f9a1c2b, 1.21 KB) from project 11111111-2222-4333-8444-555555555555.
-Nothing was sent. Re-run without --dry-run to apply.
+No changes were made. Re-run without --dry-run to apply.
 ```
 
 With `--json` or `--format json`:
@@ -464,8 +476,11 @@ What a dry run can and cannot tell you:
   bytes are sent.
 - `notifications read --all --dry-run` reads your notifications to report how many would be
   marked read.
-- `calendar rm --dry-run` with a full UUID echoes the id without looking the event up (there
-  is no single-event lookup); with a prefix it shows what the prefix resolved to.
+- A full UUID given to `calendar rm`, `discussion reply` or `notifications read` is echoed back
+  without being looked up — the real command sends it straight to the server too, so there is
+  no lookup to rehearse. With a prefix, the dry run shows what the prefix resolved to.
+- `calendar add`, `discussion post` and `folders mkdir` without `--parent` have nothing to look
+  up, so their dry runs make no request at all.
 - Rules the server applies only when the write arrives are not rehearsed: a non-empty folder
   still fails the real `folders rm` with `409 folder_not_empty`.
 
@@ -477,7 +492,8 @@ JSON it appears as sent, JSON-escaped.
 ## Errors
 
 In text mode a failing command prints a coloured message on stderr, exactly as before. In
-**JSON mode** it prints **one line** of JSON on stderr instead, and nothing on stdout:
+**JSON mode** it prints **one line** of JSON on stderr instead; stdout only ever carries
+results, never the error:
 
 ```json
 {"error":{"code":"scope_denied","status":403,"url":"https://www.synchain.ca/api/projects/11111111-2222-4333-8444-555555555555/files","detail":"{\"error\":\"scope_denied\"}"}}
@@ -499,7 +515,7 @@ All four fields are always present:
 | --- | --- | --- |
 | `code` | string | What went wrong, as a `snake_case` identifier — see below. |
 | `status` | number | The HTTP status, or `0` when there was no HTTP response (a usage error, a network failure, a check the CLI made itself). |
-| `url` | string | The request URL, or `""` when no request was made. A presigned storage URL is reported without its query string, which carries the signature. |
+| `url` | string | The request URL, or `""` when there was no HTTP response. A presigned storage URL is reported without its query string, which carries the signature. |
 | `detail` | string | The human-readable explanation — the text mode's message or the server's own. Terminal escape sequences are removed, and it is cut at 2000 characters (`… (truncated)`) so the envelope stays one parseable line. |
 
 Where `code` comes from:
@@ -508,30 +524,46 @@ Where `code` comes from:
 | --- | --- | --- |
 | The server's own code, e.g. `scope_denied`, `project_scope_denied`, `folder_not_empty` | The API returned an error body with a `snake_case` `error` field | By HTTP status ([Exit codes](#exit-codes)) |
 | `http_<status>`, e.g. `http_401`, `http_502` | The API returned an error without a usable code (a gateway HTML page, a sentence) | By HTTP status |
-| `unknown_command`, `unknown_option`, `invalid_argument`, `missing_argument`, `missing_mandatory_option_value`, `option_missing_argument` | The command line did not parse | `2` |
+| `unknown_command`, `unknown_option`, `invalid_argument`, `missing_argument`, `missing_mandatory_option_value`, `option_missing_argument`, `excess_arguments`, `conflicting_option` | The command line did not parse. `missing_argument` also covers `notifications read` with neither an id nor `--all`, and a `login` whose stdin is not a terminal with no `SYNCHAIN_TOKEN` set | `2` |
 | `missing_option`, `invalid_option`, `invalid_name`, `invalid_time_range`, `nothing_to_update`, `unknown_topic` | The CLI rejected an argument before sending anything | `2` |
-| `not_logged_in` | No key is stored | `3` |
-| `client_error` | Anything else with no HTTP response: DNS or connection failure, timeout, a local file error, an id prefix that matches nothing or more than one record | `1` |
+| `no_project_selected` | Neither `--project` nor an active project | `2` |
+| `ambiguous_id` | An id prefix (or a custom ID) matches more than one record: use more characters or the full UUID | `2` |
+| `insecure_base_url` | `login` refused the base URL: plain `http://` to a non-loopback host, credentials in the URL, another scheme, or not a URL | `2` |
+| `unauthenticated` | No key is stored. `whoami`, `project use` and `files rm` check this before sending anything; other commands send the request and get the server's `401` | `3` |
+| `id_not_found` | An id prefix matches nothing: list again for a current id | `5` |
+| `network_error` | No response at all: DNS or connection failure, TLS, timeout | `1` |
+| `storage_put_failed` | `files upload`: the storage host rejected the bytes. `status` is the storage host's, not the API's; upload again | `1` |
+| `not_a_file`, `empty_file` | `files upload` was given something other than a regular file, or a 0-byte file | `1` |
+| `login_cancelled` | The interactive `login` prompt was dismissed | `1` |
+| `client_error` | Anything else with no HTTP response, such as a local file error | `1` |
 
-Treat the list as open: servers add codes, and a few CLI-side checks carry their own (for
-example `not_a_file` from `files upload`). Branch on the **exit code** for the category, and on
-`code` only for the reasons you handle specifically.
+Treat the list as open: servers add codes, and the CLI may add its own. Branch on the **exit
+code** for the category, and on `code` only for the reasons you handle specifically.
 
-One other JSON line can appear on stderr. When `files upload` has stored the bytes but
-registering the file fails, a warning names the orphaned storage key just before the error
-envelope (a retry uploads again; the orphan is cleaned up server-side):
+Two kinds of JSON **warning** line can also appear on stderr in JSON mode, shaped
+`{"warning":{"code","detail",…}}`. Neither is an error on its own:
 
-```json
-{"warning":{"code":"orphaned_upload_key","storageKey":"<storage key>","detail":"the bytes were uploaded to storage (key: <storage key>) but registering the file record failed. …"}}
-```
+- `extension_mismatch` — `files rename` to a different extension. The rename still goes ahead
+  (or, with `--dry-run`, is still rehearsed); the server decides whether to accept it.
+- `orphaned_upload_key` — `files upload` stored the bytes but registering the file failed. It
+  comes just before that failure's error envelope and names the storage key; a retry uploads
+  again, and the orphan is cleaned up server-side:
 
-In JSON mode `files upload` prints no progress bar and no completion line on stderr; the
-result is on stdout.
+  ```json
+  {"warning":{"code":"orphaned_upload_key","storageKey":"<storage key>","detail":"the bytes were uploaded to storage (key: <storage key>) but registering the file record failed. …"}}
+  ```
+
+Whenever errors are JSON, `files upload` and `files download` write no progress bar and no
+completion line to stderr, so every line there parses; the result is on stdout (or in the
+downloaded file).
 
 The package ships TypeScript declarations, and its entry point exports the error classes
 behind these categories: `ApiError` and its subclasses `AuthError` (401), `ForbiddenError`
 (403), `NotFoundError` (404), `ConflictError` (409), `ValidationError` (400, 422),
-`RateLimitError` (429) and `ServerError` (5xx), plus the `ErrorEnvelope` type.
+`RateLimitError` (429) and `ServerError` (5xx). It also exports three kinds of type: `ErrorEnvelope`
+(the error line above), `OutputFormat` (`"text" | "json"`) and `CommandTree` with
+`CommandTreeNode` / `CommandTreeOption` (the [command tree](#machine-readable-help)). Nothing
+else is exported.
 
 ---
 
@@ -540,18 +572,20 @@ behind these categories: `ApiError` and its subclasses `AuthError` (401), `Forbi
 | Exit code | Meaning |
 | --- | --- |
 | 0 | Success, including a completed `--dry-run`, `--help` and `--version` |
-| 1 | Any other failure: network, a local check, an HTTP status not listed below |
-| 2 | Usage: unknown command or option, missing argument, invalid value |
+| 1 | Any other failure: no response (network), a local file error, a rejected storage upload, a cancelled login, an HTTP status not listed below, a failed `synchain doctor` check |
+| 2 | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix, a refused base URL |
 | 3 | Not authenticated: no stored key, or `401` |
 | 4 | Forbidden: `403`, including `scope_denied` and `project_scope_denied` |
-| 5 | Not found: `404` |
+| 5 | Not found: `404`, or an id prefix that matches nothing |
 | 6 | Conflict or validation: `409`, `400`, `422` |
 | 7 | Rate limited: `429` |
 | 8 | Server error: `5xx` |
 
 Scripts that only test "zero or not" keep working: every failure is still non-zero. Scripts
 that compare against `1` need updating — 0.8.0 and earlier used `1` for every failure.
-`synchain doctor` exits `1` when any of its checks fails.
+A bare `synchain`, or a group without a subcommand (`synchain files`), prints help on stderr
+and exits `2`, with no error envelope. `files rm` without `--yes` and without a terminal
+deletes nothing and exits `0`.
 
 ---
 
@@ -561,7 +595,7 @@ An offline preflight. It reads the local config and environment and **makes no n
 request**, so it is safe to run first in any agent or CI job:
 
 ```bash
-synchain doctor           # one line per check
+synchain doctor           # one line per check (ok / warn / FAIL), then a note that nothing was sent
 synchain doctor --json    # the same, as JSON
 ```
 
@@ -570,8 +604,8 @@ synchain doctor --json    # the same, as JSON
 | `node_version` | Node.js is 20 or newer | `fail` |
 | `config_file` | The config file exists and is valid JSON | `warn` when it does not exist yet (run `synchain login`); `fail` when it cannot be read or parsed |
 | `config_permissions` | Not listed: this check appears only on POSIX, and only when the file is open to group or other users | `warn` — run `chmod 600` on it |
-| `credential` | A stored key has the `synch_live_sk_<48 hex>` shape. It is shown masked: first 8 and last 4 characters | `warn` on an unexpected shape, or when only `SYNCHAIN_TOKEN` is set (it is read by `login` alone — run `login` first); `fail` when there is no key at all |
-| `base_url` | The stored base URL (or the default) passes the same safety check every request makes | `fail` |
+| `credential` | A stored key has the `synch_live_sk_<48 hex>` shape. It is shown masked: first 8 and last 4 characters | `warn` on an unexpected shape; `warn` when `SYNCHAIN_TOKEN` holds a different key from the stored one, or is set while no key is stored (only `login` reads it — run `login`); `fail` when no key is stored and `SYNCHAIN_TOKEN` is unset |
+| `base_url` | The stored base URL (or the default, marked `(default)`) passes the same safety check every request makes | `fail` |
 | `active_project` | An active project is set and is a UUID | `warn` |
 
 `ok` is `false` when any check is `fail`, and the command then exits `1`; warnings alone keep
@@ -610,9 +644,11 @@ answer: `synchain whoami` asks it.
 - **A JSON line on stderr instead of a coloured message** — stderr is not a terminal (a pipe,
   a file, CI), so errors come as the [JSON envelope](#errors). Set
   `SYNCHAIN_ERROR_FORMAT=text` to get the coloured message back.
-- **A scripted `synchain login` stored nothing** — pass `--base-url https://www.synchain.ca`:
-  without it `login` waits at the base-URL prompt, which a script cannot answer.
-  `synchain doctor` shows whether a key is stored.
+- **`No CLI key: stdin is not a terminal …`** (exit `2`) — a scripted `login` cannot prompt
+  for the key. Set `SYNCHAIN_TOKEN` in its environment; `synchain doctor` then shows whether a
+  key is stored.
+- **A scripted `files rm` exited `0` but the file is still there** — without a terminal the
+  confirmation prompt gets no answer. Pass `--yes` (after a `--dry-run` to check the id).
 
 ---
 

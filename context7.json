@@ -7,7 +7,7 @@
   "excludeFiles": ["CHANGELOG.md", "THIRD-PARTY-NOTICES.md", "MAINTAINERS.md", "PUBLIC_LAUNCH_SETTINGS.md"],
   "rules": [
     "Install with `npm i -g @synchain/cli` (Node.js >= 20); the binary is `synchain`.",
-    "Authenticate with `synchain login`; non-interactively, set the SYNCHAIN_TOKEN environment variable and run `synchain login --base-url https://www.synchain.ca` (only `login` reads it). Never pass a key as a command-line argument.",
+    "Authenticate with `synchain login`; non-interactively, set the SYNCHAIN_TOKEN environment variable first (only `login` reads it, and without a terminal `login` never prompts). Never pass a key as a command-line argument.",
     "Use `--format json` for machine-readable output and `--dry-run` before any write.",
     "Run `synchain doctor` to check configuration offline."
   ]

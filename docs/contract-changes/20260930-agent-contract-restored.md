@@ -26,16 +26,16 @@
 | 位置 | 改动 | 原因 |
 | --- | --- | --- |
 | §Install | 「From npm (once published)」→「From npm」 | 包早已发布在 npm 上 |
-| §Base URL、§Non-interactive | 去掉 `--base-url https://your-synchain.example` 示例;说明默认已是 `https://www.synchain.ca`,只有指向别的部署(测试环境、本机 mock)时才需要 `--base-url`;`http://` 只允许回环地址 | 虚构主机名会被照抄;而非交互 `login` 仍需显式 `--base-url` 才能跳过提示,所以示例改写成默认值本身 |
-| §Commands | 帮助说明补 `--help --format json`、`--format json`、`--dry-run`;13 个写命令的用法行加 `[--dry-run]`,并补齐用法行里漏写的 `[--json]`(三个 `rm` 的 `--json` 是新增);Auth 块补 `logout [--yes]` 与 `doctor [--json]` | 与命令树一致 |
+| §Authenticate、§Base URL、§Non-interactive | 去掉 `--base-url https://your-synchain.example` 示例;说明默认已是 `https://www.synchain.ca`,只有指向别的部署(测试环境、本机 mock)时才需要 `--base-url`;`http://` 只允许回环地址,带 `user:pass@` 的 URL 被拒;非交互 `login` 改为只写 `SYNCHAIN_TOKEN=… synchain login`,并说明 stdin 不是终端时不再提示、base URL 的取值顺序、缺 `SYNCHAIN_TOKEN` 时的退出码 2 | 虚构主机名会被照抄;非交互 `login` 已修好,不再需要为跳过提示而显式写默认 host |
+| §Commands | 帮助说明补 `--help --format json`、`--format json`、`--dry-run`,并写明哪些命令没有 `--json`;13 个写命令的用法行加 `[--dry-run]`,并补齐用法行里漏写的 `[--json]`(三个 `rm` 的 `--json` 是新增);Auth 块补 `logout [--yes]` 与 `doctor [--json]`;`files rm` 写明脚本里必须带 `--yes` | 与命令树一致 |
 | §JSON output & scripting | 补 `--format json`;失败时的描述改为指向分类退出码与 JSON 信封 | 原文「exit non-zero … human-readable message」已不完整 |
-| 新增 §Global options | `--format`、`--json`、`--dry-run`、`--base-url`、`--project`、`--yes` 各自的适用范围;环境变量 `SYNCHAIN_TOKEN`、`SYNCHAIN_ERROR_FORMAT`、配置目录变量 | 集中说明跨命令的选项 |
-| 新增 §Machine-readable help | 命令树 JSON 的字段 | 新增输出形态 |
-| 新增 §Dry runs | 13 个命令与各自的 `action`、文本 / JSON 输出、预演能与不能告诉你什么 | 新增选项 |
-| 新增 §Errors | 信封形状、JSON 模式的判定顺序、四个字段、`code` 的来源与对应退出码、孤儿存储 key 的 `warning` 行、导出的错误类 | 新增输出形态 |
+| 新增 §Global options | 写明只有 `--format` 是全局选项;`--json`、`--dry-run`、`--base-url`、`--project`、`--yes` 各自由哪些命令声明;环境变量 `SYNCHAIN_TOKEN`、`SYNCHAIN_ERROR_FORMAT`、配置目录变量 | 集中说明跨命令的选项,避免把按命令的选项误写成全局 |
+| 新增 §Machine-readable help | 命令树 JSON 的字段;裸 `synchain` 把帮助打到 stderr 并以 2 退出 | 新增输出形态 |
+| 新增 §Dry runs | 13 个命令各自的 `action` 与 `target` 顶层字段、文本 / JSON 输出、预演能与不能告诉你什么(含完整 UUID 不查找的三个命令) | 新增选项 |
+| 新增 §Errors | 信封形状、JSON 模式的判定顺序、四个字段、`code` 的来源与对应退出码、两种 `warning` 行、JSON 模式下上传 / 下载不打进度、导出的错误类与类型 | 新增输出形态 |
 | 新增 §Exit codes | 0–8 的类别表 | 默认行为变化 |
 | 新增 §`synchain doctor` | 各项检查、`ok` 与退出码、JSON 形状 | 新增命令 |
-| §Troubleshooting | 补「stderr 上是一行 JSON」与「脚本里的 `login` 什么都没存」两条 | 默认行为变化带来的新问题 |
+| §Troubleshooting | 补「stderr 上是一行 JSON」「非交互 `login` 报 No CLI key」「脚本里的 `files rm` 以 0 退出但没删」三条 | 默认行为变化带来的新问题 |
 | §Publishing | `files` 清单改为 `dist/`、`README.md`、`LICENSE`;`npm pack` → `npm pack --dry-run` | 原文漏了 `LICENSE` |
 
 - 影响:纯文档。命令名、端点、scope 表**未动**。
@@ -50,8 +50,10 @@
 退出码与错误段重写)、`README.md` 中英两段(新增「For scripts and AI agents / 面向脚本与 AI agent」)、
 `CHANGELOG.md`(`## Unreleased`)、新增 `context7.json`、`src/util/resolve-id.ts` 一处注释(原先指向
 一个不存在的文档段落),以及新增 `src/__tests__/docs-consistency.test.ts`(把上述文档里可机器核对
-的部分钉住:两份退出码表一致、`--dry-run` 命令清单、示例 JSON 可解析、`files` 清单与
-`package.json` 一致、源码注释引用的文档段落存在)。
+的部分与实现对齐,期望值尽量从实现取:`--help --format json` 命令树里 `--dry-run` / `--json` /
+`--base-url` / `--yes` 由哪些命令声明、`EXIT_CODES` 与 `exitCodeFor` 的映射、源码会发出的错误
+`code`、`evaluateDoctor` 的检查项、`reportDryRun` 的输出与各 `action` 的 `target` 字段、包入口的
+导出;另核对 `files` 清单与 `package.json` 一致、源码注释引用的文档段落存在)。
 
 ## HTTP API 契约影响
 

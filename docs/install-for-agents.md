@@ -34,14 +34,19 @@ environment — never as an argv flag (argv leaks into shell history and `/proc`
 
 ```bash
 export SYNCHAIN_TOKEN=synch_live_sk_…
-synchain login --base-url https://www.synchain.ca
+synchain login
 synchain doctor --json             # offline: confirms a key is stored, masked, no request
 ```
 
-`https://www.synchain.ca` is the default; passing it only skips the base-URL prompt, which a
-non-interactive run cannot answer. `SYNCHAIN_TOKEN` is read by `login` **only** — every
-other command uses the key `login` stored, so setting the variable without running `login`
-does nothing (`doctor` warns about exactly that).
+When stdin is not a terminal — the normal case for an agent — `login` never prompts. The key
+comes from `SYNCHAIN_TOKEN`; the base URL from `--base-url`, else the one already stored, else
+the default `https://www.synchain.ca`. Without `SYNCHAIN_TOKEN` it sends nothing and exits `2`
+with code `missing_argument`. If it reuses a stored base URL other than the default, it says so
+on stdout before sending the key.
+
+`SYNCHAIN_TOKEN` is read by `login` **only** — every other command uses the key `login` stored,
+so setting the variable without running `login` does nothing (`doctor` warns about exactly
+that).
 
 `login` validates the key against `GET /api/user/me` and persists it to the OS config dir
 (`%APPDATA%\synchain\config.json` on Windows, `~/.config/synchain/config.json` mode
@@ -148,6 +153,9 @@ synchain files rm <fileId> --dry-run --json   # which file does this id resolve 
 synchain files rm <fileId> --yes --json       # → { "deleted": { "id": "…", "name": "…" } }
 ```
 
+`--yes` is required here: without a terminal the confirmation prompt gets no answer, nothing
+is deleted, and the exit code is still `0`.
+
 ## 6. Safe trial runs
 
 There is no sandbox mode and no test tenant: anything run without `--dry-run` against
@@ -177,9 +185,11 @@ synchain files rm 3f9a1c2b --dry-run --json
 ```
 
 Check that `target` names the record you meant, then run the same command without
-`--dry-run`. A dry run makes the same read-only lookups as the real command, so it still
-needs a valid key and the right scopes — and it cannot predict rules the server checks only
-when the write arrives (a non-empty folder still fails `folders rm` with `409`).
+`--dry-run`. A dry run that has to look something up makes the same read-only requests as the
+real command, so it needs a valid key and the right scopes. It cannot predict rules the server
+checks only when the write arrives (a non-empty folder still fails `folders rm` with `409`),
+and a full UUID given to `calendar rm`, `discussion reply` or `notifications read` is echoed
+back without a lookup — pass the prefix if you want to see what it resolves to.
 
 **A loopback server for end-to-end tests.** To exercise a whole script without touching real
 data, run a mock of the endpoints it calls on your own machine and log a throwaway config in
@@ -219,11 +229,11 @@ human team. `discussion ls` / `read` show an `[AI]` tag for these posts.
 | Exit code | Meaning | What to do |
 | --- | --- | --- |
 | `0` | Success, including a completed `--dry-run` | — |
-| `1` | Other failure: network, a local check, an uncategorised HTTP status | Read `error.detail` |
-| `2` | Usage: unknown command or option, missing argument, invalid value | Fix the command line; `synchain --help --format json` lists what exists |
+| `1` | Other failure: no response (network), a local file error, a rejected storage upload, an uncategorised HTTP status, a failed `doctor` check | Read `error.detail`; retry a `network_error` |
+| `2` | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix | Fix the command line; `synchain --help --format json` lists what exists |
 | `3` | Not authenticated: no stored key, or `401` | Run `synchain login`; retrying the same key will not help |
 | `4` | Forbidden: `403`, including `scope_denied` and `project_scope_denied` | Enable the scope (§7); logging in again will not help |
-| `5` | Not found: `404` | List again to get a current id |
+| `5` | Not found: `404`, or an id prefix that matches nothing | List again to get a current id |
 | `6` | Conflict or validation: `409`, `400`, `422` | Fix the input, or the state it conflicts with, then retry |
 | `7` | Rate limited: `429` | Back off, then retry |
 | `8` | Server error: `5xx` | Retry with exponential backoff |
@@ -232,18 +242,21 @@ Every failure is non-zero, so "zero or not" checks keep working; a script that c
 against `1` needs updating (0.8.0 and earlier used `1` for everything).
 
 When stderr is not a terminal — the normal case for an agent — an error arrives as **one JSON
-line on stderr**, and stdout stays empty:
+line on stderr**; stdout carries results only, never the error:
 
 ```json
 {"error":{"code":"scope_denied","status":403,"url":"https://www.synchain.ca/api/projects/11111111-2222-4333-8444-555555555555/files","detail":"{\"error\":\"scope_denied\"}"}}
 ```
 
 All four fields are always present. `code` is the server's `snake_case` error code when it
-sent one, `http_<status>` when it did not, and a CLI code (`unknown_option`,
-`missing_mandatory_option_value`, `not_logged_in`, `client_error`, …) when no request was made;
-`status` is `0` without an HTTP response. `--json` / `--format json` always select this format;
-otherwise `SYNCHAIN_ERROR_FORMAT=json|text` decides, and without it a terminal gets text. Full
-field and code tables: [Errors](./reference.md#errors).
+sent one, `http_<status>` when it did not, and a CLI code when there was no HTTP response —
+for example `unknown_option`, `missing_mandatory_option_value`, `no_project_selected`,
+`ambiguous_id`, `id_not_found`, `unauthenticated`, `network_error` or `client_error`; `status`
+is `0` without an HTTP response. `--json` / `--format json` always select this format;
+otherwise `SYNCHAIN_ERROR_FORMAT=json|text` decides, and without it a terminal gets text. In
+this mode `files upload` / `files download` print no progress on stderr, and `files rename`
+reports an extension change as a `{"warning":…}` line, so every stderr line parses. Full field
+and code tables: [Errors](./reference.md#errors).
 
 Rule of thumb: branch on the exit code, read `error.code` for the specific reason, and show
 `error.detail` to a human.
@@ -255,8 +268,8 @@ Rule of thumb: branch on the exit code, read `error.code` for the specific reaso
 | `SYNCHAIN_TOKEN`  | CLI key for non-interactive `login` (never argv). Read by `login` only. |
 | `SYNCHAIN_ERROR_FORMAT` | `json` / `text`: the error format, instead of letting the terminal decide. |
 | `--base-url <url>`| `login` option: target deployment (default `https://www.synchain.ca`); persisted after login. |
-| `--format json`   | Any command, any position: JSON stdout, JSON errors, JSON `--help`. |
-| `--project <id>`  | Override the active project for one command.         |
-| `--json`          | Machine-readable stdout on read commands, the `rm` commands and every `--dry-run` command. |
-| `--dry-run`       | Rehearse a write: resolve, validate, print, send nothing, exit `0`. |
-| `--yes`           | Skip the `files rm` / `logout` confirmation.         |
+| `--format json`   | The one global option — any command, any position: JSON stdout, JSON errors, JSON `--help`. |
+| `--project <id>`  | Override the active project for one command (full UUID only). |
+| `--json`          | Machine-readable stdout on every command except `login`, `logout`, `project use`, `files download` and `help`. |
+| `--dry-run`       | Rehearse a write: resolve, validate, print, send no write, exit `0`. |
+| `--yes`           | Skip the `files rm` / `logout` confirmation; `files rm` in a script needs it. |

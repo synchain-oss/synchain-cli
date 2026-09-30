@@ -10,33 +10,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Agent-facing contract that 0.4.0–0.5.1 shipped from the old monorepo and 0.6.0 silently lost when this
   repository was extracted from an earlier snapshot: global `--format json|text`, `synchain --help --format json`
   (the whole command tree as JSON), `--dry-run` on every mutating command, a typed error hierarchy
-  (`AuthError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `RateLimitError`,
-  `ServerError`), and TypeScript declarations in the published package.
+  (`ApiError` and its subclasses `AuthError`, `ForbiddenError`, `NotFoundError`, `ConflictError`,
+  `ValidationError`, `RateLimitError`, `ServerError`), and TypeScript declarations in the published
+  package.
   - `--dry-run` covers 13 commands: `files upload|mv|rename|rm`, `folders mkdir|rename|rm`,
     `calendar add|edit|rm`, `discussion post|reply` and `notifications read`. It resolves ids and
     validates input, prints what would change (`{"dryRun":true,"action","target"}` with `--json`),
-    sends no write and exits 0; `files rm --dry-run` stops before the confirmation prompt.
-  - The package now declares `types` and `exports` (`.` and `./package.json` only); the entry point
-    exports the error classes and the `ErrorEnvelope` type, nothing else.
+    sends no write and exits 0; `files rm --dry-run` stops before the confirmation prompt. The only
+    requests it makes are read-only: the id lookups the real command makes, the upload-URL request of
+    `files upload`, and the unread count for `notifications read --all`.
+  - The package now declares `types` and `exports` (`.` and `./package.json` only). The entry point
+    exports the error classes and the types `ErrorEnvelope`, `OutputFormat`, `CommandTree`,
+    `CommandTreeNode` and `CommandTreeOption`, nothing else.
 
 ### Added
-- `synchain doctor`: an offline preflight that checks Node, config, key shape and base URL without any network call.
+- `synchain doctor`: an offline preflight that checks Node, config, key shape and base URL without any
+  network call; exits 1 when a check fails.
 - Structured errors: one-line JSON envelope `{"error":{"code","status","url","detail"}}` on stderr.
-  `detail` has terminal escape sequences removed and is capped at 2000 characters; a presigned storage
-  URL is reported without its query string.
+  `code` is the server's own error code when it sends one, `http_<status>` when it does not, or a CLI
+  code such as `unknown_option`, `no_project_selected`, `ambiguous_id`, `id_not_found`,
+  `unauthenticated` or `network_error`. `detail` has terminal escape sequences removed and is capped at
+  2000 characters; a presigned storage URL is reported without its query string.
 - `--json` on `files rm`, `folders rm` and `calendar rm` (`{"deleted":{…}}` on success).
+- `synchain help safety`: which commands take `--dry-run`, and what a rehearsal can and cannot see.
 - `context7.json` for Context7 indexing.
 
 ### Changed
 - **Errors are JSON by default when stderr is not a terminal** (scripts, CI, agents). Set
-  `SYNCHAIN_ERROR_FORMAT=text` to keep the old coloured prose.
+  `SYNCHAIN_ERROR_FORMAT=text` to keep the old coloured prose. `--json` / `--format json` always
+  select JSON.
 - **Exit codes are now categorised** (2 usage, 3 unauthenticated, 4 forbidden, 5 not found, 6 conflict /
-  validation, 7 rate limited, 8 server). Scripts that test `$? -eq 1` for every failure need updating.
-- `files upload` no longer prints its progress bar or its `uploaded …` completion line on stderr when
-  errors are JSON (JSON mode, or stderr not a terminal); the result is already on stdout.
+  validation, 7 rate limited, 8 server; 1 for everything else). Scripts that test `$? -eq 1` for every
+  failure need updating.
+- Whenever errors are JSON, stderr carries JSON lines only: `files upload` and `files download` no longer
+  print their progress bar or completion line there, and the `files rename` extension warning and the
+  orphaned-upload note become `{"warning":{…}}` lines.
+- `login --base-url` help no longer suggests the server can be self-hosted: it overrides the API host
+  for testing against another deployment.
 - The npm description now matches the Synchain website's positioning.
 
 ### Fixed
+- `synchain login` with stdin not a terminal (CI, agents, `</dev/null`) no longer stops at the base-URL
+  prompt, exits 0 and saves nothing. It never prompts there now: the key comes from `SYNCHAIN_TOKEN`,
+  the base URL from `--base-url`, else the stored one, else the default. Without `SYNCHAIN_TOKEN` it
+  fails before sending anything, with exit 2 and code `missing_argument`.
+- A base URL with credentials in it (`https://user:pass@…`) is refused with a clear message, and no
+  error message quotes the credentials.
 - `-h` passed as an option value (e.g. `--title -h`) is no longer mistaken for a help request. That was
   how 0.5.1 detected `--help --format json`; the restored version asks the help renderer instead.
 
