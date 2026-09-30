@@ -1,12 +1,17 @@
 {
   "name": "@synchain/cli",
   "version": "0.8.0",
-  "description": "CLI for the Synchain platform — manage project files, calendar, discussion, and members from your terminal.",
+  "description": "Command-line interface for Synchain — the all-in-one music and audio production collaboration platform. Manage project files, scheduling, discussion and members from your terminal.",
   "keywords": [
     "synchain",
     "cli",
     "music",
-    "collaboration"
+    "collaboration",
+    "music-production",
+    "audio",
+    "daw",
+    "ai-agents",
+    "json"
   ],
   "homepage": "https://github.com/synchain-oss/synchain-cli#readme",
   "bugs": {
@@ -18,6 +23,15 @@
   },
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "synchain": "./dist/index.js"
   },

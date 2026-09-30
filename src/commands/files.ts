@@ -9,6 +9,7 @@ import mime from "mime-types";
 import {
   apiFetch,
   ApiError,
+  apiErrorFor,
   formatApiError,
   withErrorBody,
   resolveActiveProject,
@@ -422,7 +423,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
     if (!res.ok) {
       guard.clear();
       const body = await res.text().catch(() => "");
-      throw new ApiError(res.status, url, body);
+      throw apiErrorFor(res.status, url, body);
     }
     if (!res.body) {
       guard.clear();

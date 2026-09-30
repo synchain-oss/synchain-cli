@@ -4,7 +4,8 @@
 
 **English** · [简体中文](#简体中文)
 
-Manage Synchain project **files**, **calendar events**, **discussion**, **members** and
+Command-line interface for Synchain — the all-in-one music and audio production collaboration
+platform. Manage project **files**, **calendar events**, **discussion**, **members** and
 **notifications** from your terminal — built for humans and AI agents alike.
 
 ## Install
@@ -71,7 +72,7 @@ the interactive prompt). Discussion posts made through a CLI key are stamped
 
 # Synchain CLI (`synchain`)
 
-从终端管理 Synchain 项目的**文件**、**日历事件**、**讨论**、**成员**与**通知** —— 同时面向人类与 AI agent。
+Synchain 的命令行工具 —— Synchain 是一站式音乐与音频制作协作平台。从终端管理项目的**文件**、**日历事件**、**讨论**、**成员**与**通知** —— 同时面向人类与 AI agent。
 
 ## 安装
 
