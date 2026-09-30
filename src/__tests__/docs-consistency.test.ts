@@ -661,6 +661,21 @@ describe("CHANGELOG.md, Unreleased", () => {
     expect(fixed).toContain("SYNCHAIN_TOKEN");
     expect(fixed).toContain("`-h`");
   });
+
+  it("records the non-interactive `files rm` refusal under Changed", () => {
+    const changed = section(unreleased, /^Changed$/);
+    expect(changed).toContain("`files rm`");
+    expect(changed).toContain("`confirmation_required`");
+  });
+});
+
+describe("non-interactive `files rm`", () => {
+  it.each([REFERENCE, AGENTS])("%s no longer documents the old exit-0 gap", (rel) => {
+    // It was documented as a known gap that a later release might close; this one does.
+    const text = read(rel);
+    expect(text).not.toMatch(/known gap/i);
+    expect(text).toContain("`confirmation_required`");
+  });
 });
 
 describe("context7.json", () => {

@@ -298,6 +298,104 @@ describe("files rm --dry-run", () => {
   });
 });
 
+describe("files rm without --yes", () => {
+  // Without a terminal nobody can answer the confirmation. It used to be asked anyway: `prompts`
+  // read EOF as "no", nothing was deleted, and the command printed a bare "Cancelled." on stdout
+  // (even under --json) and exited 0 -- which a script reads as "deleted". Now it is refused up
+  // front, as a usage error, before any request.
+  let stdinTty: PropertyDescriptor | undefined;
+  const setStdinTty = (value: boolean | undefined): void => {
+    Object.defineProperty(process.stdin, "isTTY", { value, configurable: true, writable: true });
+  };
+
+  beforeEach(() => {
+    stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  });
+
+  afterEach(() => {
+    if (stdinTty) Object.defineProperty(process.stdin, "isTTY", stdinTty);
+    else delete (process.stdin as { isTTY?: boolean }).isTTY;
+  });
+
+  it("without a terminal: exit 2, one confirmation_required envelope, no prompt, no request", async () => {
+    setStdinTty(undefined);
+    const { runFilesRm } = await import("../commands/files.js");
+
+    await runFilesRm("a1b2c3d4", { project: PROJECT, json: true });
+
+    expect(process.exitCode).toBe(2);
+    expect(promptConfirm).not.toHaveBeenCalled();
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(stdout).toEqual([]);
+    const lines = stderr.join("").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(1);
+    const { error } = JSON.parse(lines[0]!) as { error: { code: string; detail: string } };
+    expect(error.code).toBe("confirmation_required");
+    expect(error.detail).toContain("--yes");
+  });
+
+  it("without a terminal, in text mode: the same refusal as prose, never `Cancelled.`", async () => {
+    setStdinTty(false);
+    vi.stubEnv("SYNCHAIN_ERROR_FORMAT", "text");
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+    const { runFilesRm } = await import("../commands/files.js");
+
+    try {
+      await runFilesRm("a1b2c3d4", { project: PROJECT });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(process.exitCode).toBe(2);
+    expect(stdout.join("\n")).not.toContain("Cancelled.");
+    expect(plain(errors.join("\n"))).toContain("--yes");
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it("without a terminal, --dry-run still previews (it needs no confirmation)", async () => {
+    setStdinTty(undefined);
+    apiFetch.mockResolvedValueOnce({ files: [FILE] });
+    const { runFilesRm } = await import("../commands/files.js");
+
+    await runFilesRm("a1b2c3d4", { project: PROJECT, dryRun: true, json: true });
+
+    expect(process.exitCode).toBeUndefined();
+    expect(parsePlan<{ dryRun: boolean }>().dryRun).toBe(true);
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it("on a terminal: still asks, and a declined prompt deletes nothing and exits 0", async () => {
+    setStdinTty(true);
+    apiFetch.mockResolvedValueOnce({ files: [FILE] });
+    promptConfirm.mockResolvedValue(false);
+    const { runFilesRm } = await import("../commands/files.js");
+
+    await runFilesRm("a1b2c3d4", { project: PROJECT });
+
+    expect(promptConfirm).toHaveBeenCalledTimes(1);
+    expect(stdout.join("\n")).toContain("Cancelled.");
+    expect(writeCalls()).toEqual([]);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("on a terminal: a confirmed prompt deletes", async () => {
+    setStdinTty(true);
+    apiFetch.mockResolvedValueOnce({ files: [FILE] });
+    apiFetch.mockResolvedValueOnce(undefined);
+    promptConfirm.mockResolvedValue(true);
+    const { runFilesRm } = await import("../commands/files.js");
+
+    await runFilesRm("a1b2c3d4", { project: PROJECT });
+
+    expect(writeCalls()).toHaveLength(1);
+    expect((writeCalls()[0]![1] as { method: string }).method).toBe("DELETE");
+    expect(plain(stdout.join("\n"))).toContain("Deleted mix_v2.wav (a1b2c3d4).");
+  });
+});
+
 describe("rm --json success output", () => {
   it("`files rm --json --yes` prints `{deleted: {id, name}}`", async () => {
     apiFetch.mockResolvedValueOnce({ files: [FILE] });

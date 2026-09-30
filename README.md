@@ -58,7 +58,8 @@ Run `synchain help` or `synchain <group> --help` for options. Read commands acce
   stdin is not a terminal; without it, it exits `2` instead of waiting for input.
 - **Structured errors**: when stderr is not a terminal, or JSON output was requested, an error
   is one JSON line on stderr — `{"error":{"code","status","url","detail"}}`.
-  `SYNCHAIN_ERROR_FORMAT=text|json` overrides the terminal check.
+  `SYNCHAIN_ERROR_FORMAT=text|json` overrides the terminal check: set `text` to keep the
+  coloured messages when you redirect stderr to a log you read yourself (`2>err.log`).
 - **Exit codes by category**: `0` ok, `1` other, `2` usage, `3` not authenticated,
   `4` forbidden, `5` not found, `6` conflict / validation, `7` rate limited, `8` server error.
 - **`synchain doctor`**: an offline check of Node, config, key shape and base URL — no network
@@ -134,7 +135,7 @@ synchain login && synchain project use <id> && synchain files upload ./mix.wav
 - **`synchain --help --format json`**:把整棵命令树输出为 JSON —— 一次调用拿到全部命令、选项与参数。
 - **`--dry-run`**:所有会改动数据的命令都支持;解析 id、校验输入、打印将要做的改动,不发送任何写请求,退出码 `0`。
 - **非交互登录**:stdin 不是终端时,设置了 `SYNCHAIN_TOKEN` 的 `synchain login` 不会弹任何提示;没设置则以退出码 `2` 结束,而不是等待输入。
-- **结构化错误**:stderr 不是终端、或要求了 JSON 输出时,错误是 stderr 上的一行 JSON —— `{"error":{"code","status","url","detail"}}`;`SYNCHAIN_ERROR_FORMAT=text|json` 可覆盖终端判断。
+- **结构化错误**:stderr 不是终端、或要求了 JSON 输出时,错误是 stderr 上的一行 JSON —— `{"error":{"code","status","url","detail"}}`;`SYNCHAIN_ERROR_FORMAT=text|json` 可覆盖终端判断:把 stderr 重定向到自己要看的日志(`2>err.log`)时,设为 `text` 可保留原来的彩色文字。
 - **按类别区分的退出码**:`0` 成功、`1` 其它、`2` 用法错误、`3` 未认证、`4` 无权限、`5` 不存在、`6` 冲突 / 校验失败、`7` 限流、`8` 服务端错误。
 - **`synchain doctor`**:离线检查 Node、配置、key 形态与 base URL,不发任何网络请求。
 - **TypeScript 类型**:包内附带类型声明,并导出错误类(`ApiError`、`AuthError`、`ForbiddenError`、`NotFoundError` 等)。

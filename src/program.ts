@@ -212,7 +212,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
   files
     .command("rm <fileId>")
     .description("Delete a file (confirms first; --yes to skip)")
-    .option("--yes", "Skip the confirmation prompt")
+    .option("--yes", "Skip the confirmation prompt (required when stdin is not a terminal)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
     .option("--dry-run", DRY_RUN_DESC)

@@ -615,6 +615,21 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
 
+    // 0. Without a terminal nobody can answer the confirmation in step 3. Asking anyway made
+    //    `prompts` read EOF as "no" (or wait on a pipe that never answers): nothing was deleted,
+    //    a bare "Cancelled." went to stdout even under --json, and the exit code was 0 -- which
+    //    a script reads as "deleted". So refuse up front, before any request, the way a
+    //    non-interactive `login` without SYNCHAIN_TOKEN does. --dry-run needs no confirmation.
+    if (!flags.yes && !flags.dryRun && process.stdin.isTTY !== true) {
+      reportError(
+        new Error(
+          "Not deleted: stdin is not a terminal, so the confirmation cannot be answered. Pass --yes to delete (preview first with --dry-run)."
+        ),
+        { json: wantsJson(flags), code: "confirmation_required" }
+      );
+      return;
+    }
+
     // 1. Resolve 8-char prefix → full record via a project-wide files walk.
     const resolved = await resolveFile(projectId, fileId);
 
@@ -640,7 +655,7 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       return;
     }
 
-    // 3. Confirm (skipped with --yes for non-interactive use).
+    // 3. Confirm (skipped with --yes; only reached on a terminal, see step 0).
     if (!flags.yes) {
       const ok = await promptConfirm(
         `Delete ${sanitizeInline(resolved.name)} (${shortId(resolved.id)})?`,

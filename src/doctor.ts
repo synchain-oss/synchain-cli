@@ -41,11 +41,19 @@ export interface DoctorInput {
 const KEY_SHAPE = /^synch_live_sk_[0-9a-f]{48}$/;
 
 /**
+ * Below this length a value is shown as asterisks only: the 12 characters the mask keeps must be
+ * at most half of it. With a bare "more than 12" rule a 13-character value lost one character.
+ */
+const MASK_MIN_LENGTH = 24;
+
+/**
  * First 8 + last 4 characters: the only form in which a key is ever shown. A value too short to
  * show 12 characters without showing most of it is shown as asterisks only.
  */
 export function maskKey(key: string): string {
-  return key.length <= 12 ? "*".repeat(key.length) : `${key.slice(0, 8)}…${key.slice(-4)}`;
+  return key.length < MASK_MIN_LENGTH
+    ? "*".repeat(key.length)
+    : `${key.slice(0, 8)}…${key.slice(-4)}`;
 }
 
 export function evaluateDoctor(input: DoctorInput): DoctorReport {

@@ -338,8 +338,29 @@ export function formatApiError(err: unknown): string {
   if (err instanceof ApiError) {
     return withErrorBody(`API error ${err.status} ${err.url}`, err.body);
   }
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) return errorMessage(err);
   return String(err);
+}
+
+/**
+ * An Error's message, plus the system error code for a request that got no response. undici
+ * says `fetch failed` for every such failure and keeps the reason on `cause.code`; without it a
+ * reader cannot tell a refused connection from a DNS miss or a TLS error.
+ */
+function errorMessage(err: Error): string {
+  const code = networkCauseCode(err);
+  return code ? `${err.message} (${code})` : err.message;
+}
+
+/**
+ * `ECONNREFUSED`, `ENOTFOUND`, `CERT_HAS_EXPIRED`, ... from a network failure's `cause`. Only a
+ * code-shaped value is used: the cause's free-text message is left out, and so is anything that
+ * does not look like a code.
+ */
+function networkCauseCode(err: Error): string | null {
+  if (!isNetworkError(err)) return null;
+  const code = (err.cause as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code) ? code : null;
 }
 
 /** Returns true if the --json flag is set. Centralized so commands share a convention. */
@@ -507,7 +528,7 @@ export function buildErrorEnvelope(
   }
   // No HTTP response: network failures, local IO, an ambiguous or unmatched id prefix, the CLI's
   // own input checks. Status 0 rather than a missing field keeps all four fields present.
-  const detail = override.detail ?? (err instanceof Error ? err.message : String(err));
+  const detail = override.detail ?? (err instanceof Error ? errorMessage(err) : String(err));
   return {
     error: {
       code:
@@ -559,6 +580,7 @@ const USAGE_CODES = new Set([
   "insecure_base_url",
   "ambiguous_id",
   "no_project_selected",
+  "confirmation_required",
 ]);
 
 /**

@@ -33,9 +33,9 @@
 | 新增 §Machine-readable help | 命令树 JSON 的字段;裸 `synchain` 把帮助打到 stderr 并以 2 退出 | 新增输出形态 |
 | 新增 §Dry runs | 13 个命令各自的 `action` 与 `target` 顶层字段、文本 / JSON 输出、预演能与不能告诉你什么(含完整 UUID 不查找的三个命令) | 新增选项 |
 | 新增 §Errors | 信封形状、JSON 模式的判定顺序、四个字段、`code` 的来源与对应退出码、两种 `warning` 行、JSON 模式下上传 / 下载不打进度、导出的错误类与类型;注明 `detail` 只供人读、内容不稳定、不要解析 | 新增输出形态;`detail` 可能含服务端返回体原文,先声明不稳定,以后收窄(例如只留服务端 message)才不算默认行为变化 |
-| 新增 §Exit codes | 0–8 的类别表;注明 `files rm` 在无终端、不带 `--yes` 时以 `0` 退出是已知缺口,不属于契约 | 默认行为变化;该缺口以后改为非 0 时不算破坏契约 |
+| 新增 §Exit codes | 0–8 的类别表;注明 `files rm` 在无终端、不带 `--yes` 时不再以 `0` 退出,而是在发请求前以 `2` 退出(`confirmation_required`) | 默认行为变化;0.8.0 在这种情况下什么都没删却以 `0` 退出,脚本会误读成「已删除」 |
 | 新增 §`synchain doctor` | 各项检查、`ok` 与退出码、JSON 形状 | 新增命令 |
-| §Troubleshooting | 补「stderr 上是一行 JSON」「非交互 `login` 报 No CLI key」「脚本里的 `files rm` 以 0 退出但没删」三条 | 默认行为变化带来的新问题 |
+| §Troubleshooting | 补「stderr 上是一行 JSON」「非交互 `login` 报 No CLI key」「脚本里的 `files rm` 报 Not deleted(`confirmation_required`)」三条 | 默认行为变化带来的新问题 |
 | §Publishing | `files` 清单改为 `dist/`、`README.md`、`LICENSE`;`npm pack` → `npm pack --dry-run` | 原文漏了 `LICENSE` |
 
 - 影响:纯文档。命令名、端点、scope 表**未动**。
@@ -72,6 +72,9 @@
    恢复彩色散文。
 2. **退出码按类别区分**(2 用法、3 未认证、4 无权限、5 不存在、6 冲突 / 校验、7 限流、8 服务端、
    1 其它);此前所有失败都是 1。只判断「是否为 0」的脚本不受影响,比较 `== 1` 的脚本需要更新。
+   同一类别里还收掉了一处「没做却以 0 退出」:`files rm` 在 stdin 不是终端、又没带 `--yes` 时,
+   此前打印 `Cancelled.` 并以 0 退出(带 `--json` 也是散文),现在在发任何请求之前以 2 退出,
+   `code` 为 `confirmation_required`;终端上的交互确认不变。
 
 两项都记入 CHANGELOG 的「Changed」,版本号走 minor(0.9.0)。
 
