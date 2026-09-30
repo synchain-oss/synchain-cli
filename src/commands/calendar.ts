@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
@@ -56,6 +57,7 @@ export interface CalendarFlags {
   to?: string;
   project?: string;
   json?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -159,6 +161,19 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
     const body: Record<string, unknown> = { title: flags.title!.trim(), startTime, endTime, tag };
     if (flags.desc !== undefined) body.description = flags.desc;
     if (tag === "custom") body.customTag = flags.customTag!.trim();
+
+    // After validation and date normalisation: the most useful thing a rehearsal of `add` shows
+    // is which instant a local "2026-06-01 10:00" was read as. `target.event` is the POST body.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.add",
+        target: { project: projectId, event: body },
+        summary:
+          `would create event ${String(body.title)} ` +
+          `(${formatLocal(startTime)} → ${formatLocal(endTime)}, tag ${tag}).`,
+      });
+      return;
+    }
 
     const result = await apiFetch<ScheduleEventResponse>(
       `/api/projects/${encodeURIComponent(projectId)}/schedule`,
@@ -321,6 +336,22 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     if (description !== null && description !== undefined) body.description = description;
     if (tag === "custom") body.customTag = customTag;
 
+    // After resolve, merge and validate: `changes` is the full body PATCH would send.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.edit",
+        target: {
+          project: projectId,
+          event: { id: event.id, title: event.title, tag: event.tag },
+          changes: body,
+        },
+        summary:
+          `would update event ${shortId(event.id)} (${event.title}) to ${String(body.title)} ` +
+          `(${formatLocal(startTime)} → ${formatLocal(endTime)}, tag ${tag}).`,
+      });
+      return;
+    }
+
     const result = await apiFetch<ScheduleEventResponse>(
       `/api/projects/${encodeURIComponent(projectId)}/schedule/${encodeURIComponent(event.id)}`,
       { method: "PATCH", body }
@@ -354,11 +385,28 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
     const resolvedId = isUuid(eventId)
       ? eventId
       : (await resolveByPrefix(eventId, () => fetchAllEventsForResolve(projectId), "event")).id;
+
+    // Same resolution path as the real run, minus the DELETE. A full UUID is not looked up:
+    // there is no single-event GET, and the +-1 year window would miss events outside it,
+    // reporting "no such event" for one the real DELETE would remove.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.rm",
+        target: { project: projectId, event: { id: resolvedId } },
+        summary: `would delete event ${shortId(resolvedId)} from project ${projectId}.`,
+      });
+      return;
+    }
+
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/schedule/${encodeURIComponent(resolvedId)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted event ${shortId(resolvedId)}.`));
+    if (wantsJson(flags)) {
+      console.log(JSON.stringify({ deleted: { id: resolvedId } }, null, 2));
+    } else {
+      console.log(pc.green(`Deleted event ${shortId(resolvedId)}.`));
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       reportError(err, {
@@ -387,13 +435,13 @@ export const CALENDAR_HELP = {
   summary: "Create, list, edit, and remove calendar events.",
   body: [
     "Usage:",
-    "  synchain calendar add --title <t> --start <date> --end <date>",
+    "  synchain calendar add --title <t> --start <date> --end <date> [--dry-run]",
     "                        [--desc <d>] [--tag <tag>] [--custom-tag <c>]",
     "                        [--project <p>] [--json]",
     "  synchain calendar ls [--from <date>] [--to <date>] [--project <p>] [--json]",
-    "  synchain calendar edit <eventId> [--title] [--start] [--end] [--desc] [--tag]",
+    "  synchain calendar edit <eventId> [--title] [--start] [--end] [--desc] [--tag] [--dry-run]",
     "                                    [--custom-tag] [--project <p>] [--json]",
-    "  synchain calendar rm <eventId> [--project <p>]",
+    "  synchain calendar rm <eventId> [--project <p>] [--json] [--dry-run]",
     "",
     "Tags: meeting, mix, master, vocal, review, release, arrange, harmony, custom.",
     "Use --custom-tag with `--tag custom` for a free-text label.",
@@ -402,5 +450,7 @@ export const CALENDAR_HELP = {
     "(parsed in your machine's timezone). `ls` defaults to the next 30 days.",
     "",
     "Only the event creator or a project admin may edit or remove an event.",
+    "`--dry-run` on add/edit/rm validates and resolves, then prints the exact body or",
+    "id it would send, and sends no write (see `synchain help safety`).",
   ].join("\n"),
 };

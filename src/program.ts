@@ -12,6 +12,7 @@ import { createRequire } from "node:module";
 
 import { EXIT_CODES, reportError, wantsStructuredOutput } from "./api.js";
 import { DEFAULT_BASE_URL, isFirstRun, markWelcomeSeen } from "./config.js";
+import { DRY_RUN_DESC } from "./dry-run.js";
 import { buildHelpJson } from "./help-json.js";
 import { argvWantsJsonOutput, OUTPUT_FORMATS, resolveOutputFormat } from "./output-format.js";
 import { printWelcomeBanner } from "./commands/welcome.js";
@@ -113,8 +114,8 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     );
 
   // `--format json` means `--json` for every command that declares `--json`. Only for those:
-  // injecting a synthetic `--json` into argv would fail `files rm`, `project use` and the other
-  // commands without JSON output as an unknown option.
+  // injecting a synthetic `--json` into argv would fail `files download`, `project use` and the
+  // other commands without JSON output as an unknown option.
   program.hook("preAction", (_thisCommand, actionCommand) => {
     if (resolveOutputFormat(actionCommand) !== "json") return;
     if (actionCommand.options.some((option) => option.long === "--json")) {
@@ -182,6 +183,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .option("--folder <id>", "Destination folder id or 8-char prefix (root if omitted)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (localPath: string, opts) => {
       await runFilesUpload(localPath, opts);
     });
@@ -199,6 +201,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .requiredOption("--to <folderId|root>", "Destination folder id/prefix or `root`")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (fileId: string, opts) => {
       await runFilesMv(fileId, opts);
     });
@@ -207,6 +210,8 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .description("Delete a file (confirms first; --yes to skip)")
     .option("--yes", "Skip the confirmation prompt")
     .option("--project <p>", "Project id")
+    .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (fileId: string, opts) => {
       await runFilesRm(fileId, opts);
     });
@@ -215,6 +220,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .description("Rename a file (extension must stay the same)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (fileId: string, newName: string, opts) => {
       await runFilesRename(fileId, newName, opts);
     });
@@ -235,6 +241,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .option("--parent <id>", "Parent folder id or 8-char prefix (root if omitted)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (name: string, opts) => {
       await runFoldersMkdir(name, opts);
     });
@@ -242,6 +249,8 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .command("rm <folderId>")
     .description("Delete an empty folder (409 if not empty)")
     .option("--project <p>", "Project id")
+    .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (folderId: string, opts) => {
       await runFoldersRm(folderId, opts);
     });
@@ -250,6 +259,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .description("Rename a folder")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (folderId: string, newName: string, opts) => {
       await runFoldersRename(folderId, newName, opts);
     });
@@ -271,6 +281,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .option("--custom-tag <c>", "Free-text label (required when --tag custom)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (opts) => {
       await runCalendarAdd(opts);
     });
@@ -295,6 +306,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .option("--custom-tag <c>", "New free-text label (with --tag custom)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (eventId: string, opts) => {
       await runCalendarEdit(eventId, opts);
     });
@@ -302,6 +314,8 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .command("rm <eventId>")
     .description("Delete a calendar event (creator or admin only)")
     .option("--project <p>", "Project id")
+    .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (eventId: string, opts) => {
       await runCalendarRm(eventId, opts);
     });
@@ -336,6 +350,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .option("--category <c>", "mix | master | art | release | vocal | general", "general")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (opts) => {
       await runDiscussionPost(opts);
     });
@@ -345,6 +360,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .requiredOption("--content <c>", "Reply body (use `-` to read from stdin)")
     .option("--project <p>", "Project id")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (postId: string, opts) => {
       await runDiscussionReply(postId, opts);
     });
@@ -379,6 +395,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .description("Mark one notification read, or --all to clear them")
     .option("--all", "Mark all notifications read")
     .option("--json", "Output JSON")
+    .option("--dry-run", DRY_RUN_DESC)
     .action(async (id: string | undefined, opts) => {
       await runNotificationsRead(id, opts);
     });
@@ -399,7 +416,7 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
     .command("help [topic]")
     .description(
       "Rich help per topic (login, project, files, folders, calendar, discussion, members, " +
-        "notifications, doctor)"
+        "notifications, doctor, safety)"
     )
     .action((topic: string | undefined) => {
       runHelp(topic);

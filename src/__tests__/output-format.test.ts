@@ -143,14 +143,23 @@ describe("global --format on the real program", () => {
   });
 
   it("does not invent a json option on a command that never declared --json", async () => {
-    // `files rm` has no JSON output of its own: `--format json` must neither fail it as an
-    // unknown option nor slip a `json` key into its options.
+    // `files download` writes the file's bytes (to disk or stdout) and has no JSON form:
+    // `--format json` must neither fail it as an unknown option nor slip a `json` key into its
+    // options. (`files rm` used to be the example; it has had `--json` since `--dry-run`.)
     const filesMod = await import("../commands/files.js");
-    const { error } = await run(["--format", "json", "files", "rm", "abcd1234", "--yes"]);
+    const { error } = await run([
+      "--format",
+      "json",
+      "files",
+      "download",
+      "abcd1234",
+      "--out",
+      "mix.wav",
+    ]);
     expect(error).toBeUndefined();
-    const [fileId, opts] = lastCall(filesMod.runFilesRm);
+    const [fileId, opts] = lastCall(filesMod.runFilesDownload);
     expect(fileId).toBe("abcd1234");
-    expect(opts).toMatchObject({ yes: true });
+    expect(opts).toMatchObject({ out: "mix.wav" });
     expect(opts).not.toHaveProperty("json");
   });
 

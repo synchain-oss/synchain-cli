@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { renderTable } from "../util/table.js";
 import { resolveByPrefix } from "../util/resolve-id.js";
@@ -41,6 +42,7 @@ export interface FoldersFlags {
   parent?: string;
   project?: string;
   json?: boolean;
+  dryRun?: boolean;
 }
 
 async function fetchAllFolders(projectId: string): Promise<Folder[]> {
@@ -170,6 +172,19 @@ export async function runFoldersMkdir(name: string, flags: FoldersFlags): Promis
     const projectId = resolveActiveProject(cfg, flags.project);
     const body: { name: string; parentId?: string } = { name };
     if (flags.parent) body.parentId = (await resolveFolder(projectId, flags.parent)).id;
+
+    // After --parent resolves: which parent the prefix landed on is mkdir's one real mistake.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "folders.mkdir",
+        target: { project: projectId, name, parentId: body.parentId ?? null },
+        summary:
+          `would create folder ${name} under ` +
+          `${body.parentId ? `folder ${shortId(body.parentId)}` : "the project root"}.`,
+      });
+      return;
+    }
+
     const created = await apiFetch<{ folder: Folder }>(
       `/api/projects/${encodeURIComponent(projectId)}/folders`,
       { method: "POST", body }
@@ -192,11 +207,28 @@ export async function runFoldersRm(folderId: string, flags: FoldersFlags): Promi
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
     const resolved = await resolveFolder(projectId, folderId);
+
+    // A rehearsal cannot predict 409 folder_not_empty: only the real DELETE learns that.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "folders.rm",
+        target: { project: projectId, folder: { id: resolved.id, name: resolved.name } },
+        summary:
+          `would delete folder ${resolved.name} (${shortId(resolved.id)}); the server still ` +
+          `rejects a non-empty folder with 409 folder_not_empty.`,
+      });
+      return;
+    }
+
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/folders/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted folder ${folderLabel(resolved)}.`));
+    if (wantsJson(flags)) {
+      console.log(JSON.stringify({ deleted: { id: resolved.id, name: resolved.name } }, null, 2));
+    } else {
+      console.log(pc.green(`Deleted folder ${folderLabel(resolved)}.`));
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       const body = err.body as { error?: string } | null;
@@ -245,6 +277,16 @@ export async function runFoldersRename(
     }
 
     const resolved = await resolveFolder(projectId, folderId);
+
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "folders.rename",
+        target: { project: projectId, folder: { id: resolved.id, name: resolved.name }, newName },
+        summary: `would rename folder ${resolved.name} → ${newName} (id: ${shortId(resolved.id)}).`,
+      });
+      return;
+    }
+
     const result = await apiFetch<{ folder: Folder }>(
       `/api/projects/${encodeURIComponent(projectId)}/folders/${encodeURIComponent(resolved.id)}`,
       { method: "PATCH", body: { name: newName } }

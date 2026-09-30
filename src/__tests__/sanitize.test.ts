@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { reportDryRun } from "../dry-run.js";
 import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
 
 // Security-critical: these strip terminal-escape sequences from untrusted
@@ -109,5 +110,39 @@ describe("sanitizeBlock", () => {
   it("handles empty and non-string inputs", () => {
     expect(sanitizeBlock("")).toBe("");
     expect(sanitizeBlock(null)).toBe("");
+  });
+});
+
+/**
+ * `--dry-run` prints a summary that interpolates names, ids and counts off the wire. Rather than
+ * trusting each of the fourteen call sites to sanitize what it interpolates, `reportDryRun`
+ * sanitizes the finished summary once -- one funnel, so a fifteenth caller cannot forget.
+ */
+describe("reportDryRun (the --dry-run summary funnel)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function captureText(summary: string): string {
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
+    reportDryRun({}, { action: "files.rm", target: {}, summary });
+    return lines.join("\n");
+  }
+
+  it("strips CSI / OSC escapes and folds CR/LF from whatever the caller interpolated", () => {
+    const out = captureText("would delete mix\x1b[2K\x1b]0;pwned\x07evil.wav\r\nX");
+    expect(out).not.toContain("\x1b[2K");
+    expect(out).not.toContain("\x1b]0;");
+    expect(out).not.toContain("\r");
+    // picocolors may still colour the `[dry-run]` tag itself: that escape is the CLI's own.
+    // eslint-disable-next-line no-control-regex
+    expect(out.replace(/\x1b\[[0-9;]*m/g, "")).toContain("would delete mixevil.wav  X");
+  });
+
+  it("strips a C1 CSI (U+009B), which an 8-bit xterm honours like ESC [", () => {
+    expect(captureText("would delete a\u009b2Kb.wav")).not.toContain("\u009b");
   });
 });

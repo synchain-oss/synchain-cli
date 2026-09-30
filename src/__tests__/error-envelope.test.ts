@@ -380,7 +380,7 @@ describe("command handlers", () => {
   });
 
   it("a command without --json still gets the envelope when stderr is machine-read", async () => {
-    // `folders rm` declares no --json; the stream decides for it.
+    // Called without --json: the stream decides.
     const FOLDER_ID = "a1b2c3d4-0000-4000-8000-000000000000";
     delete process.env.SYNCHAIN_ERROR_FORMAT;
     const isTTY = process.stderr.isTTY;
