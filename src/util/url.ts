@@ -10,12 +10,21 @@
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
+/**
+ * `rawUrl` as an error may quote it: everything up to the last `@` masked. Used where the parsed
+ * URL cannot say whether there are credentials -- it failed to parse, or the scheme was left out
+ * and `user:` was taken for one -- so any `@` is treated as the end of a `user:pass@`.
+ */
+function quotable(rawUrl: string): string {
+  return rawUrl.replace(/^[\s\S]*@/, "***@");
+}
+
 export function assertSafeBaseUrl(rawUrl: string): void {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error(`Invalid base URL: ${rawUrl}`);
+    throw new Error(`Invalid base URL: ${quotable(rawUrl)}`);
   }
 
   // Checked before the scheme, and the message never quotes the input: `rawUrl` holds the
@@ -37,5 +46,12 @@ export function assertSafeBaseUrl(rawUrl: string): void {
         `Use https:// (http:// is allowed only for localhost during local dev).`
     );
   }
-  throw new Error(`Unsupported base URL scheme "${url.protocol}" in ${rawUrl} — use https://.`);
+  const shown = quotable(rawUrl);
+  // With an `@` in the input the "scheme" may be a username (`alice:pw@host` parses as scheme
+  // `alice:`), so it is not quoted either.
+  throw new Error(
+    shown === rawUrl
+      ? `Unsupported base URL scheme "${url.protocol}" in ${rawUrl} — use https://.`
+      : `Unsupported base URL scheme in ${shown} — use https://.`
+  );
 }

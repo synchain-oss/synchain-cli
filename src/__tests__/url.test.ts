@@ -41,6 +41,34 @@ describe("assertSafeBaseUrl", () => {
     }
   });
 
+  it("masks credentials when quoting back a URL that does not parse", () => {
+    // `new URL` fails first (a space in the host, no scheme), so the check above never runs; the
+    // message quotes the input, and it must not quote the password with it.
+    const messageOf = (raw: string): string => {
+      try {
+        assertSafeBaseUrl(raw);
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "";
+    };
+    for (const raw of ["https://alice:s3cret@exa mple.com", "https://alice:s3/cret@exa mple.com"]) {
+      const message = messageOf(raw);
+      expect(message, raw).toMatch(/^Invalid base URL: \*\*\*@exa mple\.com$/);
+      expect(message, raw).not.toContain("s3");
+      expect(message, raw).not.toContain("alice");
+    }
+    // The scheme left out: this parses, with `alice:` as the "scheme" and no username at all,
+    // so it reaches the scheme message -- which must quote neither the input nor that "scheme".
+    const noScheme = messageOf("alice:s3cret@example.com");
+    expect(noScheme).toMatch(/^Unsupported base URL scheme in \*\*\*@example\.com/);
+    expect(noScheme).not.toContain("s3cret");
+    expect(noScheme).not.toContain("alice");
+    // Input without an `@` is still quoted in full: it is the user's own typo, worth seeing.
+    expect(messageOf("not a url")).toBe("Invalid base URL: not a url");
+    expect(messageOf("ftp://example.com")).toContain('scheme "ftp:" in ftp://example.com');
+  });
+
   it("rejects non-http(s) schemes and invalid URLs", () => {
     expect(() => assertSafeBaseUrl("ftp://example.com")).toThrow();
     expect(() => assertSafeBaseUrl("file:///etc/passwd")).toThrow();

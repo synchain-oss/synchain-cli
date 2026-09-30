@@ -94,7 +94,12 @@ describe("evaluateDoctor", () => {
   });
 
   it("fails a base URL with credentials in it and never shows them", () => {
-    for (const baseUrl of ["https://alice:s3cret@www.synchain.ca", "ftp://alice:s3cret@host"]) {
+    for (const baseUrl of [
+      "https://alice:s3cret@www.synchain.ca",
+      "ftp://alice:s3cret@host",
+      // Does not parse at all (space in the host): the "Invalid base URL" message quotes it.
+      "https://alice:s3cret@exa mple.com",
+    ]) {
       const r = evaluateDoctor(input({ config: { mode: 0o600, value: { baseUrl, token: KEY } } }));
       expect(status(r, "base_url"), baseUrl).toBe("fail");
       expect(r.ok).toBe(false);
