@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
 import {
+  IdResolutionError,
   isUuid,
   projectRefLabel,
   resolveByPrefix,
@@ -378,6 +379,47 @@ describe("resolveProjectRef", () => {
     // Only a string proven by isUuid to be a full UUID gets lowercased. Folding a prefix
     // would change its meaning, and UUID prefix matching is byte-wise by definition.
     await expect(resolveProjectRef("DDDD4", allProjects)).rejects.toThrow(/No project matches/);
+  });
+});
+
+/**
+ * The error class and code, not only the wording: `reportError` turns the code into the JSON
+ * envelope's `code` and into the exit code (no match -> 5 like a 404; ambiguous -> 2, a usage
+ * error fixed by passing more of the id). A plain Error would leave all of these at
+ * `client_error` / exit 1, indistinguishable from a local IO failure.
+ */
+describe("IdResolutionError codes", () => {
+  async function codeOf(p: Promise<unknown>): Promise<string> {
+    const err = await p.then(
+      () => null,
+      (e: unknown) => e
+    );
+    expect(err).toBeInstanceOf(IdResolutionError);
+    expect(err).toBeInstanceOf(Error);
+    return (err as IdResolutionError).code;
+  }
+
+  it("resolveByPrefix: zero matches is id_not_found, several is ambiguous_id", async () => {
+    expect(await codeOf(resolveByPrefix("zzzz", all, "file"))).toBe("id_not_found");
+    expect(await codeOf(resolveByPrefix("aaaa", all, "file"))).toBe("ambiguous_id");
+  });
+
+  it("resolveProjectRef: every branch that stops carries a code", async () => {
+    expect(await codeOf(resolveProjectRef("", allProjects))).toBe("id_not_found");
+    expect(await codeOf(resolveProjectRef("DDDD4", allProjects))).toBe("id_not_found");
+    expect(await codeOf(resolveProjectRef("cafe0000", allProjects))).toBe("ambiguous_id");
+    // A custom ID that also prefixes someone else's UUID.
+    expect(await codeOf(resolveProjectRef("dddd4444", allProjects))).toBe("ambiguous_id");
+    const dup = [
+      { id: "aaaa1111-1111-4111-8111-111111111111", customId: "twin" },
+      { id: "bbbb2222-2222-4222-8222-222222222222", customId: "twin" },
+    ];
+    expect(await codeOf(resolveProjectRef("twin", async () => dup))).toBe("ambiguous_id");
+  });
+
+  it("names itself, so a stack trace or a log line says what kind of failure it was", async () => {
+    const err = (await resolveByPrefix("zzzz", all, "file").catch((e: unknown) => e)) as Error;
+    expect(err.name).toBe("IdResolutionError");
   });
 });
 

@@ -3,6 +3,7 @@ import pc from "picocolors";
 
 import { loadConfig, DEFAULT_BASE_URL, type CliConfig } from "./config.js";
 import { argvWantsJsonOutput } from "./output-format.js";
+import { IdResolutionError } from "./util/resolve-id.js";
 import { sanitizeBlock } from "./util/sanitize.js";
 import { assertSafeBaseUrl } from "./util/url.js";
 
@@ -245,7 +246,10 @@ export function resolveActiveProject(
   if (flagProject && flagProject.length > 0) return flagProject;
   const ap = cfg?.activeProject;
   if (ap?.id) return ap.id;
-  throw new Error("No project selected. Pass --project <id> or run `synchain project use <id>`.");
+  throw new IdResolutionError(
+    "No project selected. Pass --project <id> or run `synchain project use <id>`.",
+    "no_project_selected"
+  );
 }
 
 /** Cap on the error body that reaches the terminal, measured after indenting. */
@@ -463,6 +467,11 @@ function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError && err.message === "fetch failed";
 }
 
+/** The code a CLI-side error carries itself (today: an id that could not be resolved). */
+function ownCode(err: unknown): string | undefined {
+  return err instanceof IdResolutionError ? err.code : undefined;
+}
+
 /**
  * Wraps any failure in an ErrorEnvelope.
  *
@@ -494,7 +503,10 @@ export function buildErrorEnvelope(
   const detail = override.detail ?? (err instanceof Error ? err.message : String(err));
   return {
     error: {
-      code: override.code ?? (isNetworkError(err) ? "network_error" : "client_error"),
+      code:
+        override.code ??
+        ownCode(err) ??
+        (isNetworkError(err) ? "network_error" : "client_error"),
       status: 0,
       url: "",
       detail: truncateDetail(sanitizeBlock(detail)),
@@ -538,6 +550,8 @@ const USAGE_CODES = new Set([
   "nothing_to_update",
   "unknown_topic",
   "insecure_base_url",
+  "ambiguous_id",
+  "no_project_selected",
 ]);
 
 /**
@@ -552,8 +566,11 @@ export function exitCodeFor(err: unknown, code?: string): number {
   if (err instanceof ConflictError || err instanceof ValidationError) return EXIT_CODES.invalid;
   if (err instanceof RateLimitError) return EXIT_CODES.rateLimited;
   if (err instanceof ServerError) return EXIT_CODES.server;
-  if (code === "unauthenticated") return EXIT_CODES.auth;
-  if (code !== undefined && USAGE_CODES.has(code)) return EXIT_CODES.usage;
+  const own = code ?? ownCode(err);
+  if (own === "unauthenticated") return EXIT_CODES.auth;
+  // No record behind an id the user typed: the same next step as a 404, another id.
+  if (own === "id_not_found") return EXIT_CODES.notFound;
+  if (own !== undefined && USAGE_CODES.has(own)) return EXIT_CODES.usage;
   return EXIT_CODES.error;
 }
 

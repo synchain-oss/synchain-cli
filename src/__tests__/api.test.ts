@@ -12,6 +12,7 @@ import {
   wantsJson,
   type ApiFetchOptions,
 } from "../api.js";
+import { IdResolutionError } from "../util/resolve-id.js";
 
 // api.ts had zero implementation-level coverage.
 // These pin apiFetch's networked contract with a stubbed fetch — the Authorization
@@ -223,6 +224,17 @@ describe("resolveActiveProject", () => {
   it("throws when no project is selected", () => {
     expect(() => resolveActiveProject(null, undefined)).toThrow(/No project selected/);
     expect(() => resolveActiveProject({}, "")).toThrow(/No project selected/);
+  });
+
+  it("throws a no_project_selected IdResolutionError (a usage error, exit 2)", () => {
+    let caught: unknown;
+    try {
+      resolveActiveProject(null, undefined);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(IdResolutionError);
+    expect((caught as IdResolutionError).code).toBe("no_project_selected");
   });
 });
 

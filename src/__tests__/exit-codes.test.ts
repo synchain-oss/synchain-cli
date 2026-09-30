@@ -7,6 +7,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiErrorFor, EXIT_CODES, exitCodeFor, reportError } from "../api.js";
+import { IdResolutionError } from "../util/resolve-id.js";
 
 const URL = "https://api.test/x";
 const require = createRequire(import.meta.url);
@@ -80,6 +81,20 @@ describe("exitCodeFor: one documented category per failure class", () => {
     expect(exitCodeFor(new TypeError("fetch failed"))).toBe(EXIT_CODES.error);
     expect(exitCodeFor(new Error("x"))).toBe(EXIT_CODES.error);
     expect(exitCodeFor("a thrown string")).toBe(EXIT_CODES.error);
+  });
+
+  it("an id that cannot be settled: not found -> 5, ambiguous or missing -> 2", () => {
+    // What an agent does next differs: another id (like a 404), or more of the same id /
+    // an explicit --project (a usage error). client_error and 1 would say neither.
+    expect(exitCodeFor(new IdResolutionError('No file matches "zz".', "id_not_found"))).toBe(
+      EXIT_CODES.notFound
+    );
+    expect(exitCodeFor(new IdResolutionError("prefix is ambiguous", "ambiguous_id"))).toBe(
+      EXIT_CODES.usage
+    );
+    expect(exitCodeFor(new IdResolutionError("No project selected.", "no_project_selected"))).toBe(
+      EXIT_CODES.usage
+    );
   });
 
   it("an HTTP class wins over an overriding code", () => {

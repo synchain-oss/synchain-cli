@@ -15,6 +15,7 @@ import {
   wantsStructuredOutput,
 } from "../api.js";
 import { DEFAULT_BASE_URL } from "../config.js";
+import { IdResolutionError } from "../util/resolve-id.js";
 
 /**
  * The JSON error envelope on stderr.
@@ -114,10 +115,27 @@ describe("buildErrorEnvelope", () => {
     expect(blank.error.detail).toBe(`API 503 from ${URL}`);
   });
 
-  it("wraps a local failure (ambiguous prefix, IO) as client_error with status 0", () => {
-    const { error } = buildErrorEnvelope(new Error('file prefix "a1b2" is ambiguous (matches 3).'));
+  it("wraps a local failure (IO, anything unclassified) as client_error with status 0", () => {
+    const { error } = buildErrorEnvelope(new Error("EACCES: permission denied, open 'take.wav'"));
     expect(error).toMatchObject({ code: "client_error", status: 0, url: "" });
-    expect(error.detail).toContain("ambiguous");
+    expect(error.detail).toContain("EACCES");
+  });
+
+  it("uses an unresolvable id's own code: id_not_found / ambiguous_id / no_project_selected", () => {
+    const ambiguous = new IdResolutionError(
+      'file prefix "a1b2" is ambiguous (matches 3).',
+      "ambiguous_id"
+    );
+    expect(buildErrorEnvelope(ambiguous).error).toEqual({
+      code: "ambiguous_id",
+      status: 0,
+      url: "",
+      detail: 'file prefix "a1b2" is ambiguous (matches 3).',
+    });
+    const missing = new IdResolutionError('No folder matches "zz".', "id_not_found");
+    expect(buildErrorEnvelope(missing).error.code).toBe("id_not_found");
+    // A command's explicit code still wins.
+    expect(buildErrorEnvelope(missing, { code: "other" }).error.code).toBe("other");
   });
 
   it("marks a request that never got a response as network_error", () => {
@@ -385,6 +403,32 @@ describe("command handlers", () => {
     ]);
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(6);
+  });
+
+  it("an id prefix that matches nothing: id_not_found, exit 5, only the lookup GET", async () => {
+    const fetchMock = vi.fn(async () =>
+      json(200, { folders: [{ id: "a1b2c3d4-0000-4000-8000-000000000000", name: "Stems" }] })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { runFoldersRm } = await import("../commands/folders.js");
+    await runFoldersRm("ffff", { project: "p", json: true });
+
+    expect(stderrRecords()).toEqual([
+      { error: { code: "id_not_found", status: 0, url: "", detail: 'No folder matches "ffff".' } },
+    ]);
+    expect(process.exitCode).toBe(5);
+    const methods = fetchMock.mock.calls.map(
+      (call) => (call as unknown[])[1] as RequestInit | undefined
+    );
+    expect(methods.every((init) => (init?.method ?? "GET") === "GET")).toBe(true);
+  });
+
+  it("no active project: no_project_selected, exit 2", async () => {
+    const { runMembersLs } = await import("../commands/members.js");
+    await runMembersLs({ json: true });
+    const [record] = stderrRecords();
+    expect(record).toMatchObject({ error: { code: "no_project_selected", status: 0 } });
+    expect(process.exitCode).toBe(2);
   });
 
   /** A real file for `files upload` to stat and stream; mocking fs would skip the path checks. */
