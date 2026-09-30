@@ -409,6 +409,26 @@ describe("files upload --dry-run", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(writeCalls()).toEqual([]);
   });
+
+  it("text form with --folder: the RESOLVED folder id, as its 8-char short form", async () => {
+    const local = path.join(dir, "take.mp3");
+    await fs.writeFile(local, Buffer.alloc(2048, 1));
+    apiFetch.mockResolvedValueOnce({ folders: [FOLDER] });
+    apiFetch.mockResolvedValueOnce({
+      uploadUrl: "https://storage.test/bucket/obj?X-Amz-Signature=presigned-credential",
+      method: "PUT",
+      key: `${PROJECT}/${FOLDER_ID}/take.mp3`,
+    });
+    const { runFilesUpload } = await import("../commands/files.js");
+
+    await runFilesUpload(local, { project: PROJECT, folder: "ffffffff", dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe(
+      "[dry-run] would upload take.mp3 (2.00 KB) to folder ffffffff; " +
+        "the server accepted the upload request."
+    );
+  });
 });
 
 describe("files mv --dry-run", () => {
@@ -438,6 +458,21 @@ describe("files mv --dry-run", () => {
       "[dry-run] would move mix_v2.wav (a1b2c3d4) from root to folder ffffffff."
     );
   });
+
+  it("text form: from the file's current folder (short id) back to root", async () => {
+    // The other branch of both ends: a file already in a folder, moving to root. `--to root`
+    // resolves nothing, so the files listing is the only request.
+    apiFetch.mockResolvedValueOnce({ files: [{ ...FILE, folderId: FOLDER_ID }] });
+    const { runFilesMv } = await import("../commands/files.js");
+
+    await runFilesMv("a1b2c3d4", { project: PROJECT, to: "root", dryRun: true });
+
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe(
+      "[dry-run] would move mix_v2.wav (a1b2c3d4) from folder ffffffff to root."
+    );
+  });
 });
 
 describe("files rename --dry-run", () => {
@@ -457,6 +492,18 @@ describe("files rename --dry-run", () => {
       file: { id: FILE_ID, name: "mix_v2.wav" },
       newName: "mix_v3.wav",
     });
+  });
+
+  it("text form: old name → new name, and the resolved id as its 8-char short form", async () => {
+    apiFetch.mockResolvedValueOnce({ files: [FILE] });
+    const { runFilesRename } = await import("../commands/files.js");
+
+    await runFilesRename("a1b2c3d4", "mix_v3.wav", { project: PROJECT, dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe(
+      "[dry-run] would rename mix_v2.wav → mix_v3.wav (id: a1b2c3d4)."
+    );
   });
 
   it("still rejects an invalid name locally (exit 2) -- a dry run does not skip validation", async () => {
@@ -536,6 +583,16 @@ describe("folders rename --dry-run", () => {
       target: { project: PROJECT, folder: { id: FOLDER_ID, name: "stems" }, newName: "drums" },
     });
   });
+
+  it("text form: old name → new name, and the resolved id as its 8-char short form", async () => {
+    apiFetch.mockResolvedValueOnce({ folders: [FOLDER] });
+    const { runFoldersRename } = await import("../commands/folders.js");
+
+    await runFoldersRename("ffffffff", "drums", { project: PROJECT, dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe("[dry-run] would rename folder stems → drums (id: ffffffff).");
+  });
 });
 
 describe("calendar add --dry-run", () => {
@@ -566,6 +623,25 @@ describe("calendar add --dry-run", () => {
       endTime: "2026-06-01T12:00:00.000Z",
       tag: "meeting",
     });
+  });
+
+  it("text form: title, the local range the dates were read as, and the tag", async () => {
+    // Local-form input round-trips to the same wall-clock text in any timezone, so the line can
+    // be pinned exactly on every CI runner.
+    const { runCalendarAdd } = await import("../commands/calendar.js");
+
+    await runCalendarAdd({
+      project: PROJECT,
+      title: "Tracking",
+      start: "2026-06-01 10:00",
+      end: "2026-06-01 12:00",
+      dryRun: true,
+    });
+
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(plain(stdout[0]!)).toBe(
+      "[dry-run] would create event Tracking (2026-06-01 10:00 → 2026-06-01 12:00, tag meeting)."
+    );
   });
 
   it("still fails (exit 2, usage) on an invalid range -- dry run does not mean skip validation", async () => {
@@ -611,6 +687,26 @@ describe("calendar edit --dry-run", () => {
       endTime: EVENT.endTime,
       tag: "meeting",
     });
+  });
+
+  it("text form: the resolved event id as its 8-char short form, old title → new body", async () => {
+    // --start/--end in local form keep the rendered range timezone-independent (see calendar add).
+    apiFetch.mockResolvedValueOnce({ events: [EVENT], isAdmin: false });
+    const { runCalendarEdit } = await import("../commands/calendar.js");
+
+    await runCalendarEdit("e1e2e3e4", {
+      project: PROJECT,
+      title: "Overdubs",
+      start: "2026-06-01 10:00",
+      end: "2026-06-01 12:00",
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe(
+      "[dry-run] would update event e1e2e3e4 (Tracking) to Overdubs " +
+        "(2026-06-01 10:00 → 2026-06-01 12:00, tag meeting)."
+    );
   });
 });
 
@@ -665,6 +761,23 @@ describe("discussion post --dry-run", () => {
     });
   });
 
+  it("text form: the title, the category and the body's length -- not the body", async () => {
+    const { runDiscussionPost } = await import("../commands/discussion.js");
+
+    await runDiscussionPost({
+      project: PROJECT,
+      title: "Nightly mix report",
+      content: "all good",
+      category: "mix",
+      dryRun: true,
+    });
+
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(plain(stdout[0]!)).toBe(
+      '[dry-run] would create thread "Nightly mix report" in mix (8 chars of body).'
+    );
+  });
+
   it("caps the echoed body: a rehearsal confirms the body arrived, it does not reprint it", async () => {
     const { runDiscussionPost } = await import("../commands/discussion.js");
 
@@ -700,6 +813,16 @@ describe("discussion reply --dry-run", () => {
     expect(plan.action).toBe("discussion.reply");
     expect(plan.target).toMatchObject({ parentId: POST_ID, contentChars: 2 });
   });
+
+  it("text form: the RESOLVED parent id as its 8-char short form", async () => {
+    apiFetch.mockResolvedValueOnce({ posts: [{ id: POST_ID, parentId: null }] });
+    const { runDiscussionReply } = await import("../commands/discussion.js");
+
+    await runDiscussionReply("c0ffee00", { project: PROJECT, content: "+1", dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe("[dry-run] would reply to c0ffee00 (2 chars of body).");
+  });
 });
 
 describe("notifications read --dry-run", () => {
@@ -713,6 +836,16 @@ describe("notifications read --dry-run", () => {
     const plan = parsePlan<{ action: string; target: { notification: { id: string } } }>();
     expect(plan.action).toBe("notifications.read");
     expect(plan.target.notification.id).toBe(NOTIF_ID);
+  });
+
+  it("text form: the RESOLVED notification id as its 8-char short form", async () => {
+    apiFetch.mockResolvedValueOnce({ items: [notification()], unreadCount: 1 });
+    const { runNotificationsRead } = await import("../commands/notifications.js");
+
+    await runNotificationsRead("9a8b7c6d", { dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(plain(stdout[0]!)).toBe("[dry-run] would mark notification 9a8b7c6d read.");
   });
 
   it("--all previews the unread count through a read-only GET instead of POSTing read-all", async () => {
