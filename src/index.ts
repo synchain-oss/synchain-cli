@@ -8,8 +8,6 @@ import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
-import { main } from "./program.js";
-
 // Invoke only when run as a script (not when imported by tests). Resolve both
 // sides to real, absolute paths before comparing — argv[1] can be relative or a
 // symlink (e.g. under `npm link`), otherwise the CLI silently exits with code 0.
@@ -25,13 +23,19 @@ const invokedAsScript = (() => {
 })();
 
 if (invokedAsScript) {
-  main().catch((err) => {
-    console.error(err instanceof Error ? err.message : err);
-    // 不用 process.exit(1):强制退出会跳过事件循环排水,undici 连接/uv handle 在 Windows 上
-    // 触发 libuv 竞态断言(exit-crash)。设 exitCode 让事件循环排空后按码自然退出。
-    process.exitCode = 1;
-    return;
-  });
+  // Imported here rather than at the top: a library consumer's
+  // `import { NotFoundError } from "@synchain/cli"` then loads api.js and its helpers only, not
+  // every command module plus commander / prompts / mime-types. An import failure lands in the
+  // same catch as a failure inside main().
+  import("./program.js")
+    .then(({ main }) => main())
+    .catch((err) => {
+      console.error(err instanceof Error ? err.message : err);
+      // 不用 process.exit(1):强制退出会跳过事件循环排水,undici 连接/uv handle 在 Windows 上
+      // 触发 libuv 竞态断言(exit-crash)。设 exitCode 让事件循环排空后按码自然退出。
+      process.exitCode = 1;
+      return;
+    });
 }
 
 /**

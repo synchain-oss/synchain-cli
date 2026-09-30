@@ -3,7 +3,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * What `import "@synchain/cli"` gives a consumer: declarations shipped in the tarball, an
@@ -78,14 +78,72 @@ describe("package entry", () => {
   });
 });
 
-describe("npm pack", () => {
-  it("ships the type declarations for the entry and the error module", () => {
-    // The test runs before `npm run build` in both `npm run gates` and CI, so build first.
+/**
+ * Prints the npm packages that end up in `require.cache` after `import`ing PROBE_ENTRY.
+ *
+ * The CLI's heavy dependencies (commander, prompts, mime-types) are CommonJS, and a CommonJS
+ * module reached through `import` is still registered in `require.cache`. So the cache's
+ * `node_modules/<name>` keys say what an import really loaded.
+ *
+ * The entry path goes in through the environment, not argv: `index.ts` runs the CLI when
+ * `process.argv[1]` is itself.
+ */
+const LOADED_PACKAGES_PROBE = `
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+const entry = process.env.PROBE_ENTRY;
+await import(pathToFileURL(entry).href);
+const names = new Set();
+for (const key of Object.keys(createRequire(entry).cache)) {
+  const parts = key.split(path.sep);
+  const at = parts.lastIndexOf("node_modules");
+  if (at >= 0 && parts[at + 1]) names.add(parts[at + 1]);
+}
+process.stdout.write(JSON.stringify([...names]));
+`;
+
+function packagesLoadedByImporting(relativeEntry: string): string[] {
+  const out = execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", LOADED_PACKAGES_PROBE],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      env: { ...process.env, PROBE_ENTRY: path.join(ROOT, relativeEntry) },
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  return JSON.parse(out) as string[];
+}
+
+describe("built package (dist/)", () => {
+  // These tests read dist/, and they run before `npm run build` in both `npm run gates` and CI,
+  // so build first.
+  beforeAll(() => {
     execFileSync(
       process.execPath,
       [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.build.json"],
       { cwd: ROOT, stdio: "pipe" }
     );
+  }, 180_000);
+
+  it("importing the package entry does not load the CLI or its dependencies", () => {
+    // Control: the probe does see CommonJS packages pulled in through `import`. Without it, a
+    // Node version that stopped registering them would let the assertion below pass on nothing.
+    expect(packagesLoadedByImporting("dist/program.js")).toEqual(
+      expect.arrayContaining(["commander", "prompts", "mime-types"])
+    );
+
+    // `import { NotFoundError } from "@synchain/cli"` should cost api.js and its helpers, not
+    // every command module plus the prompt / MIME libraries.
+    const loaded = packagesLoadedByImporting("dist/index.js");
+    for (const heavy of ["commander", "prompts", "mime-types"]) {
+      expect(loaded).not.toContain(heavy);
+    }
+  }, 60_000);
+
+  it("npm pack ships the type declarations for the entry and the error module", () => {
     const raw = execSync("npm pack --dry-run --json --ignore-scripts", {
       cwd: ROOT,
       encoding: "utf8",
