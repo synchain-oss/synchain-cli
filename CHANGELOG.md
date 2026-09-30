@@ -4,6 +4,42 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Restored
+- Agent-facing contract that 0.4.0–0.5.1 shipped from the old monorepo and 0.6.0 silently lost when this
+  repository was extracted from an earlier snapshot: global `--format json|text`, `synchain --help --format json`
+  (the whole command tree as JSON), `--dry-run` on every mutating command, a typed error hierarchy
+  (`AuthError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `RateLimitError`,
+  `ServerError`), and TypeScript declarations in the published package.
+  - `--dry-run` covers 13 commands: `files upload|mv|rename|rm`, `folders mkdir|rename|rm`,
+    `calendar add|edit|rm`, `discussion post|reply` and `notifications read`. It resolves ids and
+    validates input, prints what would change (`{"dryRun":true,"action","target"}` with `--json`),
+    sends no write and exits 0; `files rm --dry-run` stops before the confirmation prompt.
+  - The package now declares `types` and `exports` (`.` and `./package.json` only); the entry point
+    exports the error classes and the `ErrorEnvelope` type, nothing else.
+
+### Added
+- `synchain doctor`: an offline preflight that checks Node, config, key shape and base URL without any network call.
+- Structured errors: one-line JSON envelope `{"error":{"code","status","url","detail"}}` on stderr.
+  `detail` has terminal escape sequences removed and is capped at 2000 characters; a presigned storage
+  URL is reported without its query string.
+- `--json` on `files rm`, `folders rm` and `calendar rm` (`{"deleted":{…}}` on success).
+- `context7.json` for Context7 indexing.
+
+### Changed
+- **Errors are JSON by default when stderr is not a terminal** (scripts, CI, agents). Set
+  `SYNCHAIN_ERROR_FORMAT=text` to keep the old coloured prose.
+- **Exit codes are now categorised** (2 usage, 3 unauthenticated, 4 forbidden, 5 not found, 6 conflict /
+  validation, 7 rate limited, 8 server). Scripts that test `$? -eq 1` for every failure need updating.
+- `files upload` no longer prints its progress bar or its `uploaded …` completion line on stderr when
+  errors are JSON (JSON mode, or stderr not a terminal); the result is already on stdout.
+- The npm description now matches the Synchain website's positioning.
+
+### Fixed
+- `-h` passed as an option value (e.g. `--title -h`) is no longer mistaken for a help request. That was
+  how 0.5.1 detected `--help --format json`; the restored version asks the help renderer instead.
+
 ## 0.8.0 - 2026-09-06
 
 ### Changed

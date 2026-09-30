@@ -41,9 +41,30 @@ synchain files upload ./mix.wav      # upload a file
 | Discussion | `discussion ls` · `read` · `post` · `reply` | `discussion` |
 | Members | `members ls` (read-only) | `members` |
 | Notifications | `notifications ls` · `read` (alias `notif`) | — |
+| Doctor | `doctor` (offline preflight) | — |
 | Help | `help [topic]` | — |
 
 Run `synchain help` or `synchain <group> --help` for options. Read commands accept `--json`.
+
+## For scripts and AI agents
+
+- **`--format json`** anywhere on the command line: JSON on stdout for any command (the same
+  as each command's `--json`).
+- **`synchain --help --format json`** prints the whole command tree as JSON — every command,
+  option and argument in one call.
+- **`--dry-run`** on every command that changes data: resolves ids, validates the input,
+  prints what would change, sends nothing, exits `0`.
+- **Structured errors**: when stderr is not a terminal, or JSON output was requested, an error
+  is one JSON line on stderr — `{"error":{"code","status","url","detail"}}`.
+  `SYNCHAIN_ERROR_FORMAT=text|json` overrides the terminal check.
+- **Exit codes by category**: `0` ok, `1` other, `2` usage, `3` not authenticated,
+  `4` forbidden, `5` not found, `6` conflict / validation, `7` rate limited, `8` server error.
+- **`synchain doctor`**: an offline check of Node, config, key shape and base URL — no network
+  request.
+- **TypeScript types**: the package ships declarations and exports its error classes
+  (`ApiError`, `AuthError`, `ForbiddenError`, `NotFoundError`, …).
+
+Details: [docs/install-for-agents.md](./docs/install-for-agents.md).
 
 ## Documentation
 
@@ -102,7 +123,20 @@ synchain login && synchain project use <id> && synchain files upload ./mix.wav
 | 讨论 | `discussion ls` · `read` · `post` · `reply` | `discussion` |
 | 成员 | `members ls`(只读) | `members` |
 | 通知 | `notifications ls` · `read`(别名 `notif`) | — |
+| 自检 | `doctor`(离线预检) | — |
 | 帮助 | `help [topic]` | — |
+
+## 面向脚本与 AI agent
+
+- **`--format json`**:可放在命令行任意位置,任何命令都在 stdout 输出 JSON(等同各命令的 `--json`)。
+- **`synchain --help --format json`**:把整棵命令树输出为 JSON —— 一次调用拿到全部命令、选项与参数。
+- **`--dry-run`**:所有会改动数据的命令都支持;解析 id、校验输入、打印将要做的改动,不发送任何写请求,退出码 `0`。
+- **结构化错误**:stderr 不是终端、或要求了 JSON 输出时,错误是 stderr 上的一行 JSON —— `{"error":{"code","status","url","detail"}}`;`SYNCHAIN_ERROR_FORMAT=text|json` 可覆盖终端判断。
+- **按类别区分的退出码**:`0` 成功、`1` 其它、`2` 用法错误、`3` 未认证、`4` 无权限、`5` 不存在、`6` 冲突 / 校验失败、`7` 限流、`8` 服务端错误。
+- **`synchain doctor`**:离线检查 Node、配置、key 形态与 base URL,不发任何网络请求。
+- **TypeScript 类型**:包内附带类型声明,并导出错误类(`ApiError`、`AuthError`、`ForbiddenError`、`NotFoundError` 等)。
+
+详见 [docs/install-for-agents.md](./docs/install-for-agents.md)。
 
 ## 文档
 
