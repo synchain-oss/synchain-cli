@@ -1,0 +1,14 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Synchain CLI",
+  "description": "Command-line interface for Synchain — the all-in-one music and audio production collaboration platform. Manage project files, scheduling, discussion and members from your terminal.",
+  "folders": ["docs"],
+  "excludeFolders": ["src/__tests__", "docs/contract-changes", ".github"],
+  "excludeFiles": ["CHANGELOG.md", "THIRD-PARTY-NOTICES.md", "MAINTAINERS.md", "PUBLIC_LAUNCH_SETTINGS.md"],
+  "rules": [
+    "Install with `npm i -g @synchain/cli` (Node.js >= 20); the binary is `synchain`.",
+    "Authenticate with `synchain login`; non-interactively, set the SYNCHAIN_TOKEN environment variable first (only `login` reads it, and without a terminal `login` never prompts). Never pass a key as a command-line argument.",
+    "Use `--format json` for machine-readable output and `--dry-run` before any write.",
+    "Run `synchain doctor` to check configuration offline."
+  ]
+}

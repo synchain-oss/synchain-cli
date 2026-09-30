@@ -10,8 +10,8 @@
  * characters would both "match project A's custom ID exactly" and "match project B's
  * UUID by prefix", and `project use` would silently switch to the wrong project.
  * Landing on the wrong object via prefix is the one class of mistake in this CLI that
- * **silently destroys someone else's work** (the `--dry-run` section of
- * `docs/install-for-agents.md` exists for it).
+ * **silently destroys someone else's work** (the "Safe trial runs" section of
+ * `docs/install-for-agents.md` — `--dry-run` shows what a prefix resolved to — exists for it).
  *
  * ℹ️ The server already forbids that overlap wholesale: claiming a custom ID rejects
  * every string that could be a legal prefix of some UUID, so by design the two
