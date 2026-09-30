@@ -20,6 +20,27 @@ describe("assertSafeBaseUrl", () => {
     expect(() => assertSafeBaseUrl("http://10.0.0.5")).toThrow(/insecure http/i);
   });
 
+  it("rejects a URL with credentials in it, without quoting them back", () => {
+    for (const raw of [
+      "https://alice:s3cret@example.com",
+      "https://alice@example.com",
+      "https://:s3cret@example.com",
+      "http://alice:s3cret@localhost:3000",
+      // Before the scheme check: that message quotes the input, this one must not.
+      "ftp://alice:s3cret@example.com",
+    ]) {
+      let message = "";
+      try {
+        assertSafeBaseUrl(raw);
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      expect(message, raw).toMatch(/credentials/);
+      expect(message, raw).not.toContain("s3cret");
+      expect(message, raw).not.toContain("alice");
+    }
+  });
+
   it("rejects non-http(s) schemes and invalid URLs", () => {
     expect(() => assertSafeBaseUrl("ftp://example.com")).toThrow();
     expect(() => assertSafeBaseUrl("file:///etc/passwd")).toThrow();

@@ -18,6 +18,17 @@ export function assertSafeBaseUrl(rawUrl: string): void {
     throw new Error(`Invalid base URL: ${rawUrl}`);
   }
 
+  // Checked before the scheme, and the message never quotes the input: `rawUrl` holds the
+  // password here, and this message is printed, put in a JSON envelope, and shown by
+  // `synchain doctor` -- the output most often pasted into a log. Nothing is lost by refusing:
+  // fetch() will not send a request to a URL with credentials in it anyway.
+  if (url.username || url.password) {
+    throw new Error(
+      `Refusing a base URL with credentials in it (user:pass@${url.host}). ` +
+        `Remove them: the CLI authenticates with its key only.`
+    );
+  }
+
   if (url.protocol === "https:") return;
   if (url.protocol === "http:") {
     if (LOOPBACK_HOSTS.has(url.hostname)) return;

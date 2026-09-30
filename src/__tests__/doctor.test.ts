@@ -93,6 +93,17 @@ describe("evaluateDoctor", () => {
     expect(check(r, "base_url")!.detail).toContain("insecure http");
   });
 
+  it("fails a base URL with credentials in it and never shows them", () => {
+    for (const baseUrl of ["https://alice:s3cret@www.synchain.ca", "ftp://alice:s3cret@host"]) {
+      const r = evaluateDoctor(input({ config: { mode: 0o600, value: { baseUrl, token: KEY } } }));
+      expect(status(r, "base_url"), baseUrl).toBe("fail");
+      expect(r.ok).toBe(false);
+      const printed = JSON.stringify(r);
+      expect(printed, baseUrl).not.toContain("s3cret");
+      expect(printed, baseUrl).not.toContain("alice");
+    }
+  });
+
   it("checks the default base URL when none is stored, and says so", () => {
     const r = evaluateDoctor(input({ config: { mode: 0o600, value: { token: KEY } } }));
     expect(check(r, "base_url")).toEqual({
