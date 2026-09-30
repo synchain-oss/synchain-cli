@@ -185,6 +185,11 @@ function commandsIn(md: string): string[] {
 /**
  * `action` -> the top-level keys of `target`, for every `reportDryRun` call in src/commands.
  * A command with two call sites (`notifications read <id>` / `--all`) gets the union.
+ *
+ * The scan counts brackets and commas without knowing about string literals. That holds while
+ * every `target` is built from identifiers and nested objects, as all of them are today; a
+ * literal such as `"a, b"` or `"}"` inside a target would skew the keys it reports. An
+ * unbalanced literal throws instead of looping past the end of the file.
  */
 function dryRunTargetsInSource(): {
   sites: number;
@@ -204,6 +209,9 @@ function dryRunTargetsInSource(): {
       let depth = 1;
       let end = start;
       while (depth > 0) {
+        if (end >= text.length) {
+          throw new Error(`unbalanced target literal for ${m[1]} in ${path.basename(file)}`);
+        }
         const ch = text[end++]!;
         if (ch === "{") depth++;
         else if (ch === "}") depth--;
