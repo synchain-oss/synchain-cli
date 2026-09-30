@@ -745,4 +745,17 @@ describe("notifications read --dry-run", () => {
 
     expect(plain(stdout[0]!)).toBe("[dry-run] would mark all 1 unread notification read.");
   });
+
+  it("--all text form pluralizes off safeNumber's output, not off the raw count", async () => {
+    // The only input that tells the two apart: once safeNumber strips the escape the count reads
+    // "1", so the noun is singular. Pluralizing off the raw string gives "notifications", and
+    // reportDryRun's own sanitizing would then hide which one ran -- the digits alone look right.
+    apiFetch.mockResolvedValueOnce({ items: [], unreadCount: "1\x1b[2K" });
+    const { runNotificationsRead } = await import("../commands/notifications.js");
+
+    await runNotificationsRead(undefined, { all: true, dryRun: true });
+
+    expect(stdout.join("\n")).not.toContain("\x1b[2K");
+    expect(plain(stdout[0]!)).toBe("[dry-run] would mark all 1 unread notification read.");
+  });
 });

@@ -179,6 +179,32 @@ describe("command tree (`--help --format json`)", () => {
   });
 });
 
+/**
+ * A link in `--help` that 404s for a reader without repository access is worse than no link: the
+ * reader -- a person, an agent, a scanner grading the package -- concludes the docs are gone or
+ * the tool is abandoned. This has happened once already: both documentation links pointed into a
+ * private repository. So hosts are allow-listed; adding a link means registering its host here
+ * and answering "does it open for an anonymous visitor?". Same list as help-topics.test.ts, which
+ * holds `synchain help` to it; this case holds commander's `--help` screen.
+ */
+const ALLOWED_HOSTS = new Set(["www.synchain.ca", "www.npmjs.com"]);
+
+describe("text `--help`", () => {
+  it("links only to publicly reachable hosts", async () => {
+    const { out, error } = await run(["--help"]);
+    expect((error as CommanderError).exitCode).toBe(0);
+    const urls = out.match(/https?:\/\/[^\s)]+/g) ?? [];
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      const u = new URL(url);
+      const ok =
+        ALLOWED_HOSTS.has(u.host) ||
+        (u.host === "github.com" && u.pathname.startsWith("/synchain-oss/synchain-cli/"));
+      expect(ok, `${url}: host not on the allow-list`).toBe(true);
+    }
+  });
+});
+
 describe("parsing --dry-run", () => {
   it("`files rm <id> --json --dry-run` reaches the handler with both flags", async () => {
     const filesMod = await import("../commands/files.js");
