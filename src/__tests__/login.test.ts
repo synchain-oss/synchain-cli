@@ -96,6 +96,14 @@ function stderrLines(): string[] {
     .filter((line) => line.trim() !== "");
 }
 
+/** The note a script sees when the key is about to go to a stored, non-default host. */
+const STORED_NOTE = "Using stored base URL";
+
+async function writeStoredConfig(cfg: Record<string, unknown>): Promise<void> {
+  await fs.mkdir(path.dirname(getConfigPath()), { recursive: true });
+  await fs.writeFile(getConfigPath(), JSON.stringify(cfg));
+}
+
 /** The request `login` sent to verify the key: [url, Authorization header]. */
 function verifyRequest(): [string, string | undefined] {
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -167,6 +175,8 @@ describe("login without a terminal on stdin", () => {
     expect(await readSavedConfig()).toEqual({ baseUrl: DEFAULT_BASE_URL, token: TOKEN });
     expect(process.exitCode ?? 0).toBe(0);
     expect(plain(stdout.join("\n"))).toContain("Logged in as Ada (ada@example.test).");
+    // The default host is the documented one; nothing to point out.
+    expect(plain(stdout.join("\n"))).not.toContain(STORED_NOTE);
     expect(stderrLines()).toEqual([]);
     // The key goes into the request header and the config file, nowhere else.
     expect(stdout.join("\n") + stderr.join("")).not.toContain(TOKEN);
@@ -176,11 +186,7 @@ describe("login without a terminal on stdin", () => {
     // A terminal user pressing Enter gets `existing.baseUrl`; a script must get the same host,
     // not be silently re-pointed at the default (config.ts: the stored value keeps winning).
     const project = { id: "11111111-2222-3333-4444-555555555555", name: "Album X" };
-    await fs.mkdir(path.dirname(getConfigPath()), { recursive: true });
-    await fs.writeFile(
-      getConfigPath(),
-      JSON.stringify({ baseUrl: "https://api.test", token: "old", activeProject: project })
-    );
+    await writeStoredConfig({ baseUrl: "https://api.test", token: "old", activeProject: project });
     process.env[TOKEN_ENV_VAR] = TOKEN;
 
     await runLogin({});
@@ -193,6 +199,54 @@ describe("login without a terminal on stdin", () => {
       activeProject: project,
     });
     expect(process.exitCode ?? 0).toBe(0);
+    // No prompt showed the host, so the log names it: first line, before the result.
+    const lines = stdout.map(plain);
+    expect(lines[0]).toBe("Using stored base URL https://api.test (pass --base-url to override).");
+    expect(lines[1]).toContain("Logged in as Ada");
+    expect(stderrLines()).toEqual([]);
+  });
+
+  it("a stored base URL that is the default (trailing slash and all) is not pointed out", async () => {
+    await writeStoredConfig({ baseUrl: `${DEFAULT_BASE_URL}/`, token: "old" });
+    process.env[TOKEN_ENV_VAR] = TOKEN;
+
+    await runLogin({});
+
+    expect(verifyRequest()[0]).toBe(`${DEFAULT_BASE_URL}/api/user/me`);
+    expect(plain(stdout.join("\n"))).not.toContain(STORED_NOTE);
+  });
+
+  it("a key rejected by a stored host: host named on stdout, stderr stays one envelope line", async () => {
+    // The case the note exists for: a stale host left over from testing another deployment
+    // receives the injected key. The note must not break the one-line stderr contract.
+    await writeStoredConfig({ baseUrl: "https://api.test", token: "old" });
+    process.env[TOKEN_ENV_VAR] = TOKEN;
+    fetchMock.mockImplementation(async () => new Response("Unauthorized", { status: 401 }));
+
+    await runLogin({});
+
+    expect(process.exitCode).toBe(3);
+    expect(stdout.map(plain)).toEqual([
+      "Using stored base URL https://api.test (pass --base-url to override).",
+    ]);
+    const lines = stderrLines();
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!).error.url).toContain("https://api.test/");
+    expect(stdout.join("\n") + stderr.join("")).not.toContain(TOKEN);
+  });
+
+  it("the note strips control characters from a stored base URL", async () => {
+    // config.json is replayed on every run, so a sequence that got into it must not reach the
+    // terminal (the same output-boundary rule as whoami's active-project line).
+    await writeStoredConfig({ baseUrl: "https://api.test/x\x1b[2K", token: "old" });
+    process.env[TOKEN_ENV_VAR] = TOKEN;
+
+    await runLogin({});
+
+    const note = stdout.map(plain).find((line) => line.startsWith(STORED_NOTE));
+    expect(note).toBeDefined();
+    expect(note).not.toContain("\x1b");
+    expect(note).toContain("https://api.test/x");
   });
 
   it("--base-url still wins over the default", async () => {
@@ -203,6 +257,8 @@ describe("login without a terminal on stdin", () => {
     expect(promptText).not.toHaveBeenCalled();
     expect(verifyRequest()[0]).toBe("https://api.test/api/user/me");
     expect((await readSavedConfig())?.baseUrl).toBe("https://api.test");
+    // The host was on the command line: nothing to point out.
+    expect(plain(stdout.join("\n"))).not.toContain(STORED_NOTE);
   });
 
   it.each([
@@ -289,6 +345,8 @@ describe("login on a terminal (interactive flow unchanged)", () => {
     expect(auth).toBe(`Bearer ${TOKEN}`);
     expect(await readSavedConfig()).toEqual({ baseUrl: "https://api.test", token: TOKEN });
     expect(process.exitCode ?? 0).toBe(0);
+    // The prompt already showed the host; the no-terminal note is not repeated here.
+    expect(plain(stdout.join("\n"))).not.toContain(STORED_NOTE);
   });
 
   it("with SYNCHAIN_TOKEN: still asks for the base URL, skips only the key prompt", async () => {

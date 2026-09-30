@@ -77,6 +77,17 @@ export async function runLogin(flags: LoginFlags): Promise<void> {
     return;
   }
 
+  // On a terminal the prompt shows which host the key is about to go to; without one nobody sees
+  // it. Say so before sending anything when that host is a stored, non-default one -- say, left
+  // over from testing against another deployment -- so an injected key going somewhere
+  // unexpected is visible in the log. stdout, not stderr: on failure, stderr stays exactly one
+  // envelope line (the envelope's `url` names the host too).
+  if (!interactive && !flags.baseUrl && baseUrl !== DEFAULT_BASE_URL) {
+    console.log(
+      pc.dim(`Using stored base URL ${sanitizeInline(baseUrl)} (pass --base-url to override).`)
+    );
+  }
+
   // Resolve the CLI key. Precedence:
   //   1. SYNCHAIN_TOKEN env var (CI-friendly, no argv leakage).
   //   2. Interactive hidden prompt (the default for humans; only reached on a terminal).
