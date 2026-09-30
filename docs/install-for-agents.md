@@ -154,7 +154,9 @@ synchain files rm <fileId> --yes --json       # → { "deleted": { "id": "…", 
 ```
 
 `--yes` is required here: without a terminal the confirmation prompt gets no answer, nothing
-is deleted, and the exit code is still `0`.
+is deleted, and the exit code is still `0`. That exit `0` is a known gap, not a guarantee (a
+later release may make it non-zero), so check for the `deleted` object rather than the exit
+code alone.
 
 ## 6. Safe trial runs
 

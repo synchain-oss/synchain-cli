@@ -32,8 +32,8 @@
 | 新增 §Global options | 写明只有 `--format` 是全局选项;`--json`、`--dry-run`、`--base-url`、`--project`、`--yes` 各自由哪些命令声明;环境变量 `SYNCHAIN_TOKEN`、`SYNCHAIN_ERROR_FORMAT`、配置目录变量 | 集中说明跨命令的选项,避免把按命令的选项误写成全局 |
 | 新增 §Machine-readable help | 命令树 JSON 的字段;裸 `synchain` 把帮助打到 stderr 并以 2 退出 | 新增输出形态 |
 | 新增 §Dry runs | 13 个命令各自的 `action` 与 `target` 顶层字段、文本 / JSON 输出、预演能与不能告诉你什么(含完整 UUID 不查找的三个命令) | 新增选项 |
-| 新增 §Errors | 信封形状、JSON 模式的判定顺序、四个字段、`code` 的来源与对应退出码、两种 `warning` 行、JSON 模式下上传 / 下载不打进度、导出的错误类与类型 | 新增输出形态 |
-| 新增 §Exit codes | 0–8 的类别表 | 默认行为变化 |
+| 新增 §Errors | 信封形状、JSON 模式的判定顺序、四个字段、`code` 的来源与对应退出码、两种 `warning` 行、JSON 模式下上传 / 下载不打进度、导出的错误类与类型;注明 `detail` 只供人读、内容不稳定、不要解析 | 新增输出形态;`detail` 可能含服务端返回体原文,先声明不稳定,以后收窄(例如只留服务端 message)才不算默认行为变化 |
+| 新增 §Exit codes | 0–8 的类别表;注明 `files rm` 在无终端、不带 `--yes` 时以 `0` 退出是已知缺口,不属于契约 | 默认行为变化;该缺口以后改为非 0 时不算破坏契约 |
 | 新增 §`synchain doctor` | 各项检查、`ok` 与退出码、JSON 形状 | 新增命令 |
 | §Troubleshooting | 补「stderr 上是一行 JSON」「非交互 `login` 报 No CLI key」「脚本里的 `files rm` 以 0 退出但没删」三条 | 默认行为变化带来的新问题 |
 | §Publishing | `files` 清单改为 `dist/`、`README.md`、`LICENSE`;`npm pack` → `npm pack --dry-run` | 原文漏了 `LICENSE` |

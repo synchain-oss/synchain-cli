@@ -184,7 +184,8 @@ synchain files rm <fileId> [--yes] [--project <p>] [--json] [--dry-run]
 - **mv `--to root`** — moves the file out of any folder.
 - **rename** — the extension must stay the same (the server returns 422 otherwise).
 - **rm** — asks for confirmation; pass `--yes` to skip it. A script **must** pass `--yes`:
-  with no terminal to answer the prompt, nothing is deleted and the exit code is still `0`.
+  with no terminal to answer the prompt, nothing is deleted and the exit code is still `0`
+  (a known gap, not a guarantee — see [Exit codes](#exit-codes)).
   `--dry-run` shows which file an id prefix resolved to, without asking and without deleting;
   with `--json` a real delete prints `{ "deleted": { "id", "name" } }`.
 
@@ -516,7 +517,7 @@ All four fields are always present:
 | `code` | string | What went wrong, as a `snake_case` identifier — see below. |
 | `status` | number | The HTTP status, or `0` when there was no HTTP response (a usage error, a network failure, a check the CLI made itself). |
 | `url` | string | The request URL, or `""` when there was no HTTP response. A presigned storage URL is reported without its query string, which carries the signature. |
-| `detail` | string | The human-readable explanation — the text mode's message or the server's own. Terminal escape sequences are removed, and it is cut at 2000 characters (`… (truncated)`) so the envelope stays one parseable line. |
+| `detail` | string | The human-readable explanation — the text mode's message or the server's own. Terminal escape sequences are removed, and it is cut at 2000 characters (`… (truncated)`) so the envelope stays one parseable line. **Meant for people, not programs:** its wording and content are not stable and may be narrowed in a later release (for example to the server's message alone), so show it to a human and branch on `code` and `status` — never parse `detail`. |
 
 Where `code` comes from:
 
@@ -584,8 +585,13 @@ else is exported.
 Scripts that only test "zero or not" keep working: every failure is still non-zero. Scripts
 that compare against `1` need updating — 0.8.0 and earlier used `1` for every failure.
 A bare `synchain`, or a group without a subcommand (`synchain files`), prints help on stderr
-and exits `2`, with no error envelope. `files rm` without `--yes` and without a terminal
-deletes nothing and exits `0`.
+and exits `2`, with no error envelope.
+
+`files rm` without `--yes` and without a terminal deletes nothing, prints `Cancelled.` on
+stdout (plain text, even with `--json`) and exits `0`. This is a known gap in current
+versions, **not part of the contract**: a later release may make it exit non-zero. Do not
+read exit `0` from `files rm` as "deleted" — pass `--yes`, and with `--json` check for the
+`deleted` object.
 
 ---
 
