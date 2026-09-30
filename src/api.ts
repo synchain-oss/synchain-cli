@@ -371,6 +371,13 @@ export function stderrPrefersJson(env: NodeJS.ProcessEnv = process.env): boolean
  * whether stderr is a terminal. A flag is a decision about this one invocation; the variable is
  * ambient, so it only replaces the terminal check.
  *
+ * Only the JSON side of the flag counts. `--format` picks the format of a command's *result* on
+ * stdout, and `text` is its default: passing `--format text` asks for nothing that omitting it
+ * does not, so it is no request for prose errors. What decides stderr is
+ * `SYNCHAIN_ERROR_FORMAT` (`=text` gets prose on a pipe too); `--format json` is the one case
+ * the flag speaks for stderr as well (like `--json`): a caller that parses the result parses the
+ * failure.
+ *
  * argv is scanned as well as the flags because `login`, `logout`, `project use`,
  * `files download`, `files rm`, `folders rm` and `calendar rm` declare no `--json`: they have no
  * JSON form of their normal output, but they can still fail, and an agent driving everything
@@ -558,8 +565,13 @@ const USAGE_CODES = new Set([
  * The exit code for a failure: by ApiError class first (never by comparing status numbers here --
  * the classes are the one mapping from status to category), then by the envelope code for the
  * CLI's own failures.
+ *
+ * One exception comes before the classes: a failed storage PUT. Its status is the storage host's,
+ * not the Synchain API's -- a 403 there is an expired or mismatched presigned signature, fixed by
+ * uploading again, not by changing a permission (exit 4) -- so it stays in the catch-all.
  */
 export function exitCodeFor(err: unknown, code?: string): number {
+  if (code === "storage_put_failed") return EXIT_CODES.error;
   if (err instanceof AuthError) return EXIT_CODES.auth;
   if (err instanceof ForbiddenError) return EXIT_CODES.forbidden;
   if (err instanceof NotFoundError) return EXIT_CODES.notFound;
@@ -591,6 +603,11 @@ export function exitCodeFor(err: unknown, code?: string): number {
  *
  * The envelope goes to stderr, not stdout: stdout carries only a command's result, so a `--json`
  * consumer never has to tell a result from an error in the same stream.
+ *
+ * The argv part of the structured-mode check reads `process.argv`, not the argv handed to
+ * `main()`: a command handler has no other copy. The two are the same in a real run; a test that
+ * drives `main()` with its own argv and relies on `--format json` for a *command's* failure has
+ * to set `process.argv` (or pass `--json` / `SYNCHAIN_ERROR_FORMAT`) as well.
  */
 export function reportError(
   err: unknown,

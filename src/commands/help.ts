@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { reportError } from "../api.js";
+import { reportError, wantsStructuredOutput } from "../api.js";
 import { DEFAULT_BASE_URL } from "../config.js";
 import { sanitizeInline } from "../util/sanitize.js";
 import { CALENDAR_HELP } from "./calendar.js";
@@ -159,13 +159,15 @@ export function runHelp(topic: string | undefined): void {
   if (!t) {
     // argv-sourced (self-inflicted, not cross-tenant), sanitized for the same reason the rest
     // of the CLI is: an unsanitized exception among sanitized neighbours is how the rule erodes.
-    reportError(
-      new Error(
-        `Unknown help topic: ${sanitizeInline(topic)}\n` +
-          `Available topics: ${Object.keys(TOPICS).join(", ")}`
-      ),
-      { code: "unknown_topic" }
-    );
+    const unknown = `Unknown help topic: ${sanitizeInline(topic)}`;
+    const available = `Available topics: ${Object.keys(TOPICS).join(", ")}`;
+    if (wantsStructuredOutput()) {
+      reportError(new Error(`${unknown}\n${available}`), { code: "unknown_topic" });
+    } else {
+      // Text mode prints what it always has: the complaint in red, the topic list plain.
+      reportError(new Error(unknown), { code: "unknown_topic" });
+      console.error(available);
+    }
     return;
   }
   console.log(`${pc.bold(t.name)} — ${t.summary}`);

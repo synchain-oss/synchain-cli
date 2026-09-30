@@ -234,6 +234,16 @@ describe("when stderr is structured", () => {
     expect(wantsStructuredOutput({}, ["node", "synchain", "login", "--format=json"])).toBe(true);
   });
 
+  it("--format text is no request for prose errors: stdout's format, and the default", () => {
+    // SYNCHAIN_ERROR_FORMAT is the stderr switch; `--format text` changes nothing on stderr.
+    delete process.env.SYNCHAIN_ERROR_FORMAT;
+    Object.defineProperty(process.stderr, "isTTY", { value: undefined, configurable: true });
+    const argv = ["node", "synchain", "--format", "text", "files", "ls"];
+    expect(wantsStructuredOutput({}, argv)).toBe(true);
+    process.env.SYNCHAIN_ERROR_FORMAT = "text";
+    expect(wantsStructuredOutput({}, argv)).toBe(false);
+  });
+
   it("with nothing set, a non-TTY stderr is structured and a TTY is not", () => {
     delete process.env.SYNCHAIN_ERROR_FORMAT;
     const plain = ["node", "synchain", "files", "ls"];
@@ -494,7 +504,8 @@ describe("command handlers", () => {
     expect(stderrChunks.join("")).not.toContain("presigned-sig");
     expect(stderrChunks.join("")).not.toContain("X-Amz");
     expect(stdout).toEqual([]);
-    expect(process.exitCode).toBe(4);
+    // The storage host's 403 is an expired or mismatched signature, not a permission to fix.
+    expect(process.exitCode).toBe(1);
   });
 
   it("files upload: the orphaned-key note is its own JSON line, key sanitized", async () => {

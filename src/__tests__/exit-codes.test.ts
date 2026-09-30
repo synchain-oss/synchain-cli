@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import pc from "picocolors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiErrorFor, EXIT_CODES, exitCodeFor, reportError } from "../api.js";
@@ -98,10 +99,16 @@ describe("exitCodeFor: one documented category per failure class", () => {
   });
 
   it("an HTTP class wins over an overriding code", () => {
-    // files upload labels a failed storage PUT `storage_put_failed`; a 403 there is still a 403.
-    expect(exitCodeFor(apiErrorFor(403, URL, null), "storage_put_failed")).toBe(
-      EXIT_CODES.forbidden
-    );
+    expect(exitCodeFor(apiErrorFor(404, URL, null), "some_server_code")).toBe(EXIT_CODES.notFound);
+    expect(exitCodeFor(apiErrorFor(401, URL, null), "invalid_name")).toBe(EXIT_CODES.auth);
+  });
+
+  it("except a failed storage PUT: its status is the storage host's, not the API's", () => {
+    // A 403 there is nearly always an expired or mismatched presigned signature: the fix is to
+    // upload again, not to change a permission, which is what exit 4 would say. A 5xx from the
+    // storage host is not the Synchain server failing either.
+    expect(exitCodeFor(apiErrorFor(403, URL, null), "storage_put_failed")).toBe(EXIT_CODES.error);
+    expect(exitCodeFor(apiErrorFor(503, URL, null), "storage_put_failed")).toBe(EXIT_CODES.error);
   });
 
   it("reportError sets the category, so a call site cannot forget to", () => {
@@ -231,6 +238,18 @@ describe("main(): parse errors, --help and --version", () => {
     expect(error.code).toBe("unknown_topic");
     expect(error.detail).toContain("Unknown help topic: nosuchtopic");
     expect(error.detail).toContain("Available topics: login");
+  });
+
+  it("an unknown help topic in text mode prints as before: red complaint, plain topic list", async () => {
+    process.env.SYNCHAIN_ERROR_FORMAT = "text";
+    await run("help", "nosuchtopic");
+    expect(process.exitCode).toBe(EXIT_CODES.usage);
+    // Two writes, only the first through pc.red: one red block over both lines would change
+    // what a terminal shows, which text mode promises not to do.
+    expect(vi.mocked(console.error).mock.calls).toEqual([
+      [pc.red("Unknown help topic: nosuchtopic")],
+      [expect.stringMatching(/^Available topics: login, /)],
+    ]);
   });
 
   it("--help exits 0 with the help on stdout and nothing on stderr", async () => {
