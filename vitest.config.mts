@@ -9,7 +9,8 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       // 排除不可单元测试的交互式/退出路径(只卡纯逻辑,口径见 CLAUDE.md §8):
       //   - src/util/prompt.ts     交互式 prompts(包装 prompts 库,依赖真实 TTY)
-      //   - src/index.ts           CLI 入口:首启 banner(TTY)+ uncaught error 的 process.exitCode = 1
+      //   - src/index.ts           bin 入口:「是否作为脚本运行」判定 + uncaught error 的 process.exitCode = 1
+      //                            (命令装配与 main() 在 src/program.ts,计入覆盖率)
       //   - src/commands/**        各命令 handler 的错误路径统一 process.exitCode = 1/交互确认
       // 这些文件的纯逻辑仍被对应测试覆盖(正确性),但不计入覆盖率阈值。
       exclude: [

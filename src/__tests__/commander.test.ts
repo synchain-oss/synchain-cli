@@ -39,6 +39,7 @@ vi.mock("../commands/logout.js", () => ({ runLogout: vi.fn() }));
 vi.mock("../commands/whoami.js", () => ({ runWhoami: vi.fn() }));
 vi.mock("../commands/project.js", () => ({ runProjectLs: vi.fn(), runProjectUse: vi.fn() }));
 vi.mock("../commands/help.js", () => ({ runHelp: vi.fn() }));
+vi.mock("../commands/doctor.js", () => ({ runDoctor: vi.fn() }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Mock = ReturnType<typeof vi.fn>;
@@ -46,7 +47,7 @@ type Mock = ReturnType<typeof vi.fn>;
 describe("commander parsing", () => {
   it("parses `files upload ./x.wav --folder abc`", async () => {
     const filesMod = await import("../commands/files.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync(["node", "synchain", "files", "upload", "./x.wav", "--folder", "abc"]);
@@ -58,7 +59,7 @@ describe("commander parsing", () => {
 
   it("parses `files mv <id> --to root --project p1`", async () => {
     const filesMod = await import("../commands/files.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync([
@@ -80,7 +81,7 @@ describe("commander parsing", () => {
 
   it("`login` accepts SYNCHAIN_TOKEN env var instead of a --token flag", async () => {
     const loginMod = await import("../commands/login.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     const prev = process.env.SYNCHAIN_TOKEN;
@@ -98,7 +99,7 @@ describe("commander parsing", () => {
   });
 
   it("`login --token <t>` is rejected (flag removed for security)", async () => {
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     program.configureOutput({ writeErr: () => {}, writeOut: () => {} });
@@ -109,7 +110,7 @@ describe("commander parsing", () => {
 
   it("parses `discussion post --title T --content C --category mix`", async () => {
     const discMod = await import("../commands/discussion.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync([
@@ -131,7 +132,7 @@ describe("commander parsing", () => {
 
   it("parses `notif ls --all --limit 5` (alias + flags)", async () => {
     const notifMod = await import("../commands/notifications.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync(["node", "synchain", "notif", "ls", "--all", "--limit", "5"]);
@@ -142,7 +143,7 @@ describe("commander parsing", () => {
 
   it("parses `notifications read --all`", async () => {
     const notifMod = await import("../commands/notifications.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync(["node", "synchain", "notifications", "read", "--all"]);
@@ -154,7 +155,7 @@ describe("commander parsing", () => {
 
   it("parses `calendar add` with --tag custom --custom-tag", async () => {
     const calMod = await import("../commands/calendar.js");
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     await program.parseAsync([
@@ -178,8 +179,86 @@ describe("commander parsing", () => {
     expect(call[0]).toMatchObject({ tag: "custom", customTag: "Tracking", title: "Session" });
   });
 
+  it("parses `files rm <id> --dry-run --json` (rm has both since --dry-run)", async () => {
+    const filesMod = await import("../commands/files.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync(["node", "synchain", "files", "rm", "file-abc", "--dry-run", "--json"]);
+    const calls = (filesMod.runFilesRm as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBe("file-abc");
+    expect(call[1]).toMatchObject({ dryRun: true, json: true });
+  });
+
+  it("parses `notifications read --all --dry-run`", async () => {
+    const notifMod = await import("../commands/notifications.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync(["node", "synchain", "notifications", "read", "--all", "--dry-run"]);
+    const calls = (notifMod.runNotificationsRead as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBeUndefined();
+    expect(call[1]).toMatchObject({ all: true, dryRun: true });
+  });
+
+  it("parses `calendar edit <id> --title T --dry-run`", async () => {
+    const calMod = await import("../commands/calendar.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync([
+      "node",
+      "synchain",
+      "calendar",
+      "edit",
+      "evt-abc",
+      "--title",
+      "T",
+      "--dry-run",
+    ]);
+    const calls = (calMod.runCalendarEdit as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toBe("evt-abc");
+    expect(call[1]).toMatchObject({ title: "T", dryRun: true });
+  });
+
+  it("parses the global `--format json` and forwards it as the command's --json", async () => {
+    const filesMod = await import("../commands/files.js");
+    const { buildProgram } = await import("../program.js");
+    const program = buildProgram();
+    program.exitOverride();
+    await program.parseAsync([
+      "node",
+      "synchain",
+      "--format",
+      "json",
+      "files",
+      "ls",
+      "--folder",
+      "abc",
+    ]);
+    const calls = (filesMod.runFilesLs as Mock).mock.calls;
+    const call = calls[calls.length - 1]!;
+    expect(call[0]).toMatchObject({ folder: "abc", json: true });
+  });
+
+  it("parses `doctor --json` and `--format json doctor` alike", async () => {
+    const doctorMod = await import("../commands/doctor.js");
+    const { buildProgram } = await import("../program.js");
+    await buildProgram().parseAsync(["node", "synchain", "doctor", "--json"]);
+    await buildProgram().parseAsync(["node", "synchain", "--format", "json", "doctor"]);
+    await buildProgram().parseAsync(["node", "synchain", "doctor"]);
+    expect((doctorMod.runDoctor as Mock).mock.calls.map((call) => call[0])).toEqual([
+      { json: true },
+      { json: true },
+      { json: false },
+    ]);
+  });
+
   it("--help output points at the new repo (REPO_URL)", async () => {
-    const { buildProgram } = await import("../index.js");
+    const { buildProgram } = await import("../program.js");
     const program = buildProgram();
     program.exitOverride();
     let out = "";

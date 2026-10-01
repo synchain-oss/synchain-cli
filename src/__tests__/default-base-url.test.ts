@@ -20,8 +20,8 @@ import { DEFAULT_BASE_URL } from "../config.js";
  */
 const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Files whose text reaches users directly. */
-const USER_FACING = ["index.ts", "commands/help.ts", "commands/login.ts"] as const;
+/** Files whose text reaches users directly (program.ts holds the commander wiring and `--help`). */
+const USER_FACING = ["program.ts", "commands/help.ts", "commands/login.ts"] as const;
 
 describe("DEFAULT_BASE_URL", () => {
   it("is the platform's own https origin", () => {

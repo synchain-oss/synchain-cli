@@ -9,7 +9,7 @@ import { runProjectLs } from "../commands/project.js";
 
 // exit-crash 回归:API 错误路径(400/401)后不得调用 process.exit()——那会在 Windows 上
 // 跳过事件循环排水、触发 undici/uv handle 关闭竞态断言崩溃(exit -1073740791)。正确行为是
-// 设 process.exitCode = 1 后 return,让事件循环排空后按码自然退出。
+// 由 reportError 设 process.exitCode(按错误类别)后 return,让事件循环排空后按码自然退出。
 
 let tmpDir: string;
 let origHome: string | undefined;
@@ -25,9 +25,12 @@ beforeEach(async () => {
   process.env.APPDATA = tmpDir;
   process.env.XDG_CONFIG_HOME = tmpDir;
   process.exitCode = 0;
+  // vitest 的 stderr 不是 TTY,默认会走 JSON 信封;这里断言的是文本路径(console.error)。
+  process.env.SYNCHAIN_ERROR_FORMAT = "text";
 });
 
 afterEach(async () => {
+  delete process.env.SYNCHAIN_ERROR_FORMAT;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   process.exitCode = 0;
@@ -54,7 +57,7 @@ function stubFetch(status: number): ReturnType<typeof vi.fn> {
 }
 
 describe("API 错误路径不再 process.exit(exit-crash 回归)", () => {
-  it("members ls 收到 API 400 时设 exitCode=1 且不调用 process.exit", async () => {
+  it("members ls 收到 API 400 时设 exitCode=6(invalid) 且不调用 process.exit", async () => {
     stubFetch(400);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -62,11 +65,11 @@ describe("API 错误路径不再 process.exit(exit-crash 回归)", () => {
     await runMembersLs({ project: "p1" });
 
     expect(exitSpy).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(1);
+    expect(process.exitCode).toBe(6);
     expect(errSpy).toHaveBeenCalled();
   });
 
-  it("project ls 收到 API 401 时设 exitCode=1 且不调用 process.exit", async () => {
+  it("project ls 收到 API 401 时设 exitCode=3(auth) 且不调用 process.exit", async () => {
     stubFetch(401);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -74,7 +77,7 @@ describe("API 错误路径不再 process.exit(exit-crash 回归)", () => {
     await runProjectLs({});
 
     expect(exitSpy).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(1);
+    expect(process.exitCode).toBe(3);
     expect(errSpy).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, formatApiError, wantsJson } from "../api.js";
+import { apiFetch, reportError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
 import { userLabel, type MeResponse } from "./login.js";
@@ -36,8 +36,10 @@ export function activeProjectLine(active: { id: string; name?: string | null }):
 export async function runWhoami(flags: WhoamiFlags): Promise<void> {
   const cfg = await loadConfig();
   if (!cfg?.token) {
-    console.error(pc.red("Not logged in. Run `synchain login`."));
-    process.exitCode = 1;
+    reportError(new Error("Not logged in. Run `synchain login`."), {
+      json: wantsJson(flags),
+      code: "unauthenticated",
+    });
     return;
   }
 
@@ -64,8 +66,7 @@ export async function runWhoami(flags: WhoamiFlags): Promise<void> {
     }
     console.log(`Run \`${pc.cyan("synchain project ls")}\` to see your projects.`);
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import { apiFetch, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
 import { renderTable } from "../util/table.js";
 import { shortId } from "../util/sanitize.js";
@@ -64,8 +64,7 @@ export async function runMembersLs(flags: MembersFlags): Promise<void> {
     }
     console.log(renderMembersTable(members));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
