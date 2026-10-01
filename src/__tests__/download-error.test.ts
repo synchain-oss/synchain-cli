@@ -69,6 +69,46 @@ describe("files download error path", () => {
     expect(process.exitCode).toBe(5);
   });
 
+  it("falls back to http_<status> when the body claims JSON but does not parse", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"error":"not_fou', {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          })
+      )
+    );
+    const { runFilesDownload } = await import("../commands/files.js");
+    await runFilesDownload(FILE_ID, { project: "p", out: path.join(tmpDir, "x.bin") });
+
+    const [record] = envelopes();
+    expect(record).toMatchObject({ error: { code: "http_404", status: 404 } });
+    expect(process.exitCode).toBe(5);
+  });
+
+  it("strips terminal escapes from a server message in the envelope's detail", async () => {
+    const ESC = String.fromCharCode(27);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "not_found", message: `${ESC}[2Jpwned` }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          })
+      )
+    );
+    const { runFilesDownload } = await import("../commands/files.js");
+    await runFilesDownload(FILE_ID, { project: "p", out: path.join(tmpDir, "x.bin") });
+
+    const [record] = envelopes();
+    expect(record).toMatchObject({ error: { code: "not_found", status: 404 } });
+    expect(String(record!.error.detail)).not.toContain(ESC);
+    expect(String(record!.error.detail)).toContain("pwned");
+  });
+
   it("still falls back to http_<status> when the body is not JSON", async () => {
     vi.stubGlobal(
       "fetch",
