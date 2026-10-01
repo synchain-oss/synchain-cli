@@ -153,10 +153,9 @@ synchain files rm <fileId> --dry-run --json   # which file does this id resolve 
 synchain files rm <fileId> --yes --json       # → { "deleted": { "id": "…", "name": "…" } }
 ```
 
-`--yes` is required here: without a terminal the confirmation prompt gets no answer, nothing
-is deleted, and the exit code is still `0`. That exit `0` is a known gap, not a guarantee (a
-later release may make it non-zero), so check for the `deleted` object rather than the exit
-code alone.
+`--yes` is required here: without a terminal nobody can answer the confirmation, so
+`files rm` without it sends nothing, deletes nothing and fails with exit `2` and code
+`confirmation_required`.
 
 ## 6. Safe trial runs
 
@@ -232,7 +231,7 @@ human team. `discussion ls` / `read` show an `[AI]` tag for these posts.
 | --- | --- | --- |
 | `0` | Success, including a completed `--dry-run` | — |
 | `1` | Other failure: no response (network), a local file error, a rejected storage upload, an uncategorised HTTP status, a failed `doctor` check | Read `error.detail`; retry a `network_error` |
-| `2` | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix | Fix the command line; `synchain --help --format json` lists what exists |
+| `2` | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix, a `files rm` without `--yes` (`confirmation_required`) | Fix the command line; `synchain --help --format json` lists what exists |
 | `3` | Not authenticated: no stored key, or `401` | Run `synchain login`; retrying the same key will not help |
 | `4` | Forbidden: `403`, including `scope_denied` and `project_scope_denied` | Enable the scope (§7); logging in again will not help |
 | `5` | Not found: `404`, or an id prefix that matches nothing | List again to get a current id |

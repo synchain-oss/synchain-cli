@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `code` is the server's own error code when it sends one, `http_<status>` when it does not, or a CLI
   code such as `unknown_option`, `no_project_selected`, `ambiguous_id`, `id_not_found`,
   `unauthenticated` or `network_error`. `detail` has terminal escape sequences removed and is capped at
-  2000 characters; a presigned storage URL is reported without its query string.
+  2000 characters; a presigned storage URL is reported without its query string. For a request that got
+  no response, `detail` names the system error code when there is one (`fetch failed (ECONNREFUSED)`).
 - `--json` on `files rm`, `folders rm` and `calendar rm` (`{"deleted":{…}}` on success).
 - `synchain help safety`: which commands take `--dry-run`, and what a rehearsal can and cannot see.
 - `context7.json` for Context7 indexing.
@@ -42,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Exit codes are now categorised** (2 usage, 3 unauthenticated, 4 forbidden, 5 not found, 6 conflict /
   validation, 7 rate limited, 8 server; 1 for everything else). Scripts that test `$? -eq 1` for every
   failure need updating.
+- **`files rm` without `--yes` and without a terminal now fails** with exit 2 and code
+  `confirmation_required`, before sending anything. It used to print `Cancelled.` on stdout (even with
+  `--json`) and exit 0 without deleting, which a script could read as success. On a terminal it still
+  asks.
 - Whenever errors are JSON, stderr carries JSON lines only: `files upload` and `files download` no longer
   print their progress bar or completion line there, and the `files rename` extension warning and the
   orphaned-upload note become `{"warning":{…}}` lines.

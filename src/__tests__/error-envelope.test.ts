@@ -154,6 +154,37 @@ describe("buildErrorEnvelope", () => {
     );
   });
 
+  it("names the system error code behind `fetch failed`, in both modes", () => {
+    // undici's message is the same for every failure; the reason is on `cause.code`. Without it
+    // an agent cannot tell a refused connection from a DNS miss or a TLS error.
+    const refused = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" }),
+    });
+    expect(buildErrorEnvelope(refused).error).toMatchObject({
+      code: "network_error",
+      detail: "fetch failed (ECONNREFUSED)",
+    });
+    expect(formatApiError(refused)).toBe("fetch failed (ECONNREFUSED)");
+
+    const dns = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("getaddrinfo ENOTFOUND nope.invalid"), { code: "ENOTFOUND" }),
+    });
+    expect(buildErrorEnvelope(dns).error.detail).toBe("fetch failed (ENOTFOUND)");
+  });
+
+  it("adds only a code-shaped cause: no free text, no escapes, nothing on other errors", () => {
+    const odd = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("x"), { code: "\u001b[2Kpwned code" }),
+    });
+    expect(buildErrorEnvelope(odd).error.detail).toBe("fetch failed");
+    expect(buildErrorEnvelope(new TypeError("fetch failed")).error.detail).toBe("fetch failed");
+    const notNetwork = new Error("disk full", {
+      cause: Object.assign(new Error("x"), { code: "ENOSPC" }),
+    });
+    expect(buildErrorEnvelope(notNetwork).error.detail).toBe("disk full");
+    expect(formatApiError(notNetwork)).toBe("disk full");
+  });
+
   it("keeps all four fields present so callers never have to check for existence", () => {
     const { error } = buildErrorEnvelope("a thrown string");
     expect(Object.keys(error).sort()).toEqual(["code", "detail", "status", "url"]);

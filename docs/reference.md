@@ -184,8 +184,8 @@ synchain files rm <fileId> [--yes] [--project <p>] [--json] [--dry-run]
 - **mv `--to root`** — moves the file out of any folder.
 - **rename** — the extension must stay the same (the server returns 422 otherwise).
 - **rm** — asks for confirmation; pass `--yes` to skip it. A script **must** pass `--yes`:
-  with no terminal to answer the prompt, nothing is deleted and the exit code is still `0`
-  (a known gap, not a guarantee — see [Exit codes](#exit-codes)).
+  with no terminal to answer the prompt, `files rm` refuses before sending anything — exit `2`,
+  code `confirmation_required` — and nothing is deleted.
   `--dry-run` shows which file an id prefix resolved to, without asking and without deleting;
   with `--json` a real delete prints `{ "deleted": { "id", "name" } }`.
 
@@ -367,7 +367,7 @@ to a command that does not declare it is an unknown option (exit `2`).
 | `--dry-run` | the 13 commands listed under [Dry runs](#dry-runs) | Rehearse the command; no write is sent. |
 | `--base-url <url>` | `login` | Which deployment to talk to (default `https://www.synchain.ca`). Saved to the config, so every later command uses it. See [Base URL](#base-url). |
 | `--project <id>` | the `files`, `folders`, `calendar`, `discussion` and `members` commands | The project for this one call — a full UUID only (see [Projects](#projects)). |
-| `--yes` | `files rm`, `logout` | Skip the confirmation prompt. A script deleting a file needs it: without a terminal and without `--yes`, `files rm` deletes nothing and still exits `0`. `logout` does not ask when stdin is not a terminal. |
+| `--yes` | `files rm`, `logout` | Skip the confirmation prompt. A script deleting a file needs it: without a terminal and without `--yes`, `files rm` deletes nothing and fails with exit `2` (`confirmation_required`). `logout` does not ask when stdin is not a terminal. |
 
 Environment variables:
 
@@ -530,9 +530,10 @@ Where `code` comes from:
 | `no_project_selected` | Neither `--project` nor an active project | `2` |
 | `ambiguous_id` | An id prefix (or a custom ID) matches more than one record: use more characters or the full UUID | `2` |
 | `insecure_base_url` | `login` refused the base URL: plain `http://` to a non-loopback host, credentials in the URL, another scheme, or not a URL | `2` |
+| `confirmation_required` | `files rm` without `--yes` while stdin is not a terminal: nobody can answer the confirmation, so it sends nothing and deletes nothing | `2` |
 | `unauthenticated` | No key is stored. `whoami`, `project use` and `files rm` check this before sending anything; other commands send the request and get the server's `401` | `3` |
 | `id_not_found` | An id prefix matches nothing: list again for a current id | `5` |
-| `network_error` | No response at all: DNS or connection failure, TLS, timeout | `1` |
+| `network_error` | No response at all: DNS or connection failure, TLS, timeout. `detail` adds the system error code when there is one, e.g. `fetch failed (ECONNREFUSED)` | `1` |
 | `storage_put_failed` | `files upload`: the storage host rejected the bytes. `status` is the storage host's, not the API's; upload again | `1` |
 | `not_a_file`, `empty_file` | `files upload` was given something other than a regular file, or a 0-byte file | `1` |
 | `login_cancelled` | The interactive `login` prompt was dismissed | `1` |
@@ -574,7 +575,7 @@ else is exported.
 | --- | --- |
 | 0 | Success, including a completed `--dry-run`, `--help` and `--version` |
 | 1 | Any other failure: no response (network), a local file error, a rejected storage upload, a cancelled login, an HTTP status not listed below, a failed `synchain doctor` check |
-| 2 | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix, a refused base URL |
+| 2 | Usage: unknown command or option, missing argument, invalid value, no project selected, an ambiguous id prefix, a refused base URL, a `files rm` without `--yes` and without a terminal |
 | 3 | Not authenticated: no stored key, or `401` |
 | 4 | Forbidden: `403`, including `scope_denied` and `project_scope_denied` |
 | 5 | Not found: `404`, or an id prefix that matches nothing |
@@ -587,11 +588,9 @@ that compare against `1` need updating — 0.8.0 and earlier used `1` for every 
 A bare `synchain`, or a group without a subcommand (`synchain files`), prints help on stderr
 and exits `2`, with no error envelope.
 
-`files rm` without `--yes` and without a terminal deletes nothing, prints `Cancelled.` on
-stdout (plain text, even with `--json`) and exits `0`. This is a known gap in current
-versions, **not part of the contract**: a later release may make it exit non-zero. Do not
-read exit `0` from `files rm` as "deleted" — pass `--yes`, and with `--json` check for the
-`deleted` object.
+`files rm` without `--yes` and without a terminal deletes nothing and exits `2` with code
+`confirmation_required` (0.8.0 printed `Cancelled.` and exited `0`). Pass `--yes`, and with
+`--json` check for the `deleted` object.
 
 ---
 
@@ -653,8 +652,9 @@ answer: `synchain whoami` asks it.
 - **`No CLI key: stdin is not a terminal …`** (exit `2`) — a scripted `login` cannot prompt
   for the key. Set `SYNCHAIN_TOKEN` in its environment; `synchain doctor` then shows whether a
   key is stored.
-- **A scripted `files rm` exited `0` but the file is still there** — without a terminal the
-  confirmation prompt gets no answer. Pass `--yes` (after a `--dry-run` to check the id).
+- **`Not deleted: stdin is not a terminal …`** (exit `2`, `confirmation_required`) — a
+  scripted `files rm` cannot ask for confirmation. Pass `--yes` (after a `--dry-run` to check
+  the id).
 
 ---
 

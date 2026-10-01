@@ -54,6 +54,17 @@ describe("evaluateDoctor", () => {
     expect(maskKey("x".repeat(12))).toBe("*".repeat(12));
   });
 
+  it("shows none of a value that is not at least twice as long as what the mask shows", () => {
+    // A 13-character value used to lose only its middle character. The mask only ever meets a
+    // key whose shape is wrong (cut short, pasted twice), so the short cases are the real ones.
+    const pattern = (n: number): string =>
+      Array.from({ length: n }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
+    for (const n of [13, 16, 23]) {
+      expect(maskKey(pattern(n)), String(n)).toBe("*".repeat(n));
+    }
+    expect(maskKey(pattern(24))).toBe(`${pattern(24).slice(0, 8)}…${pattern(24).slice(-4)}`);
+  });
+
   it("fails when nothing is stored and SYNCHAIN_TOKEN is unset", () => {
     const r = evaluateDoctor(input({ config: null }));
     expect(r.ok).toBe(false);

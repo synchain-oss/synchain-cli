@@ -74,6 +74,7 @@ describe("exitCodeFor: one documented category per failure class", () => {
       "nothing_to_update",
       "unknown_topic",
       "insecure_base_url",
+      "confirmation_required",
     ]) {
       expect(exitCodeFor(new Error("x"), code), code).toBe(EXIT_CODES.usage);
     }
