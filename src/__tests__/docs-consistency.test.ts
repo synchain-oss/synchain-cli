@@ -64,6 +64,13 @@ function section(md: string, heading: RegExp): string {
   return lines.slice(start).join("\n");
 }
 
+/**
+ * The CHANGELOG section of the release that restored the agent contract. These checks pin what
+ * 0.9.0 says it ships, so they target that section by version (not "Unreleased", which stops
+ * existing at the release cut, and not "the newest section", which later releases will become).
+ */
+const RELEASE_090 = /^0\.9\.0 - \d{4}-\d{2}-\d{2}$/;
+
 /** Every fenced block of `lang` in `md`, as raw text. */
 function fencedBlocks(md: string, lang: string): string[] {
   const re = new RegExp("```" + lang + "\\n([\\s\\S]*?)```", "g");
@@ -552,7 +559,7 @@ describe("docs/install-for-agents.md", () => {
 
 describe("counts of dry-run commands", () => {
   it.each([REFERENCE, AGENTS, "CHANGELOG.md"])("%s says as many as the tree has", (rel) => {
-    const text = rel === "CHANGELOG.md" ? section(read(rel), /^Unreleased$/) : read(rel);
+    const text = rel === "CHANGELOG.md" ? section(read(rel), RELEASE_090) : read(rel);
     const counts = [...text.matchAll(/\b(\d+) commands\b/g)].map((m) => Number(m[1]));
     for (const n of counts) expect(n).toBe(DRY_RUN_COMMANDS.length);
   });
@@ -645,25 +652,25 @@ describe("README.md", () => {
   });
 });
 
-describe("CHANGELOG.md, Unreleased", () => {
-  const unreleased = section(read("CHANGELOG.md"), /^Unreleased$/);
+describe("CHANGELOG.md, 0.9.0", () => {
+  const notes = section(read("CHANGELOG.md"), RELEASE_090);
 
   it("names everything the package entry now exports", () => {
     const types = [...read("src/index.ts").matchAll(/export type \{([^}]+)\}/g)].flatMap((m) =>
       m[1]!.split(",").map((s) => s.trim()).filter(Boolean)
     );
     const names = [...Object.keys(entry), ...types];
-    expect(names.filter((n) => !unreleased.includes(`\`${n}\``))).toEqual([]);
+    expect(names.filter((n) => !notes.includes(`\`${n}\``))).toEqual([]);
   });
 
   it("records the non-interactive login fix and the -h fix under Fixed", () => {
-    const fixed = section(unreleased, /^Fixed$/);
+    const fixed = section(notes, /^Fixed$/);
     expect(fixed).toContain("SYNCHAIN_TOKEN");
     expect(fixed).toContain("`-h`");
   });
 
   it("records the non-interactive `files rm` refusal under Changed", () => {
-    const changed = section(unreleased, /^Changed$/);
+    const changed = section(notes, /^Changed$/);
     expect(changed).toContain("`files rm`");
     expect(changed).toContain("`confirmation_required`");
   });
