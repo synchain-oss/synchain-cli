@@ -10,6 +10,7 @@ import {
   apiFetch,
   ApiError,
   apiErrorFor,
+  readJsonOrText,
   reportError,
   resolveActiveProject,
   wantsJson,
@@ -481,8 +482,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
     }
     if (!res.ok) {
       guard.clear();
-      const body = await res.text().catch(() => "");
-      throw apiErrorFor(res.status, url, body);
+      throw apiErrorFor(res.status, url, await readJsonOrText(res));
     }
     if (!res.body) {
       guard.clear();
