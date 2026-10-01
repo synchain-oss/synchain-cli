@@ -16,6 +16,9 @@ useDefault = true
   regexTarget = "line"
   regexes = [
     '''synch_live_sk_(\*|<|…|xxx|placeholder)''',
+    # context7.json 的 Context7 认领公钥：Context7 要求把它公开放进仓库根目录以证明仓库归属，
+    # 它不是凭据（只能用来认领 context7.com/synchain-oss/synchain-cli 这个 library）。只放行这一种形态。
+    '''"public_key": "pk_[A-Za-z0-9]{16,40}"''',
   ]
   # LICENSES/MIT.txt 是 MIT 许可证全文,高熵段会触发 generic/high-entropy 误报
   paths = [

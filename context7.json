@@ -1,5 +1,7 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/synchain-oss/synchain-cli",
+  "public_key": "pk_BHflfAe7MYs8sAkoVV11s",
   "projectTitle": "Synchain CLI",
   "description": "Command-line interface for Synchain — the all-in-one music and audio production collaboration platform. Manage project files, scheduling, discussion and members from your terminal.",
   "folders": ["docs"],
