@@ -7,10 +7,11 @@ title = "gitleaks config — Synchain CLI"
 [extend]
 useDefault = true
 
-# [allowlist] 是必需项,不是可选项:CLI 的公开文档故意出现
+# allowlists 是必需项,不是可选项:CLI 的公开文档故意出现
 # synch_live_sk_ 凭据占位形态,不放行则首跑必红。误报逐条登记并写明理由,
 # 不得用 --no-verify 绕过。
-[allowlist]
+# (gitleaks 8.30.1 的 [[allowlists]] 写法:可按条目设 condition / targetRules,作用域可收窄到单个文件与规则。)
+[[allowlists]]
   description = "文档故意出现的凭据占位形态 + LICENSES 高熵文本(非真实凭据)"
   # 按整行匹配:占位串后跟 <…>/…/*/xxx/placeholder,真实 key 是 48 位 hex,不会被本正则命中
   regexTarget = "line"
@@ -18,6 +19,18 @@ useDefault = true
     '''synch_live_sk_(\*|<|…|xxx|placeholder)''',
   ]
   # LICENSES/MIT.txt 是 MIT 许可证全文,高熵段会触发 generic/high-entropy 误报
+  # (同一条目里 regexes 与 paths 为默认的 OR 关系,与改写前的 [allowlist] 语义一致)
   paths = [
     '''LICENSES/''',
   ]
+
+[[allowlists]]
+  # Context7 认领公钥:Context7 要求把它公开放在仓库根目录的 context7.json 里以证明仓库归属,
+  # 它不是凭据(只能用来认领 context7.com/synchain-oss/synchain-cli 这个 library)。
+  # 作用域收到最窄:只这一个文件(AND)、只这一整行(行首行尾锚定)、只对误报的 generic-api-key 规则。
+  description = "context7.json 的 Context7 认领公钥(公开,非凭据)"
+  condition = "AND"
+  targetRules = ["generic-api-key"]
+  regexTarget = "line"
+  paths = ['''^context7\.json$''']
+  regexes = ['''^\s*"public_key": "pk_[A-Za-z0-9]{16,40}",?\s*$''']
