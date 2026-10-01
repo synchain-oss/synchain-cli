@@ -165,7 +165,12 @@ function joinUrl(base: string, p: string): string {
   return `${trimmedBase}${trimmedPath}`;
 }
 
-async function readJsonOrText(res: Response): Promise<unknown> {
+/**
+ * An error response's body as apiFetch reads it: parsed JSON when the server says it is JSON,
+ * else the raw text. Exported so `files download` (which sends its own fetch to follow the 302)
+ * builds the same ApiError body — and so the envelope keeps the server's code — as every other call.
+ */
+export async function readJsonOrText(res: Response): Promise<unknown> {
   const ct = res.headers.get("content-type") ?? "";
   if (ct.includes("application/json")) {
     try {
