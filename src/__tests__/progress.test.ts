@@ -85,6 +85,22 @@ describe("Progress", () => {
     expect(writes.some((w) => w.includes("KB"))).toBe(true);
   });
 
+  it("quiet: renders nothing on a TTY, not even the completion message", () => {
+    // Structured stderr: every line there has to parse as JSON, and the result is on stdout.
+    const { stream, writes } = makeStream(true);
+    const p = new Progress({ total: 100, label: "uploading", stream, quiet: true });
+    p.add(50);
+    p.finish("uploaded x (100 B)");
+    expect(writes).toHaveLength(0);
+  });
+
+  it("quiet: drops the non-TTY completion message too", () => {
+    const { stream, writes } = makeStream(false);
+    const p = new Progress({ stream, quiet: true });
+    p.finish("downloaded to ./x.wav");
+    expect(writes).toHaveLength(0);
+  });
+
   it("defaults to process.stderr and empty label", () => {
     const p = new Progress();
     // Non-TTY stderr → no output on add/finish; constructor must not throw.

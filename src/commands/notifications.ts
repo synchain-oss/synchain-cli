@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, formatApiError, wantsJson } from "../api.js";
+import { apiFetch, reportError, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, shortId, safeNumber } from "../util/sanitize.js";
 
@@ -28,6 +29,7 @@ export interface NotificationsFlags {
   all?: boolean;
   limit?: string;
   json?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -90,8 +92,7 @@ export async function runNotificationsLs(flags: NotificationsFlags): Promise<voi
     }
     console.log(pc.dim(`${safeNumber(res.unreadCount)} unread`));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -111,6 +112,21 @@ export async function runNotificationsRead(
   await loadConfig();
   try {
     if (flags.all) {
+      // `--all --dry-run` spends one read-only GET on the unread count: "mark ALL read" is only
+      // worth previewing as "3 of them, or 300?". A GET changes nothing, so it fits the rule
+      // that a rehearsal runs reads and skips writes.
+      if (flags.dryRun) {
+        const preview = await apiFetch<NotificationsResponse>("/api/user/notifications");
+        // Pluralized off the rendered value, like the real run's "Marked N notification(s)".
+        const shown = String(safeNumber(preview.unreadCount));
+        reportDryRun(flags, {
+          action: "notifications.read",
+          target: { scope: "all", unreadCount: preview.unreadCount },
+          summary: `would mark all ${shown} unread notification${shown === "1" ? "" : "s"} read.`,
+        });
+        return;
+      }
+
       const res = await apiFetch<{ ok: boolean; updated: number }>(
         "/api/user/notifications/read-all",
         { method: "POST" }
@@ -132,12 +148,25 @@ export async function runNotificationsRead(
     }
 
     if (!id) {
-      console.error(pc.red("Provide a notification id, or use --all to mark everything read."));
-      process.exitCode = 1;
+      reportError(new Error("Provide a notification id, or use --all to mark everything read."), {
+        json: wantsJson(flags),
+        code: "missing_argument",
+      });
       return;
     }
 
     const resolvedId = await resolveNotificationId(id);
+
+    // After resolution: which notification did the prefix land on?
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "notifications.read",
+        target: { scope: "one", notification: { id: resolvedId } },
+        summary: `would mark notification ${shortId(resolvedId)} read.`,
+      });
+      return;
+    }
+
     const res = await apiFetch<{ ok: boolean; updated: number }>(
       `/api/user/notifications/${encodeURIComponent(resolvedId)}/read`,
       { method: "POST" }
@@ -150,13 +179,7 @@ export async function runNotificationsRead(
       console.log(pc.dim(`${shortId(resolvedId)} was already read (or not found).`));
     }
   } catch (err) {
-    if (err instanceof Error && /No notification matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }

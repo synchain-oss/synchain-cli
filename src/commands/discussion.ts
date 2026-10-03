@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, sanitizeBlock, shortId, safeNumber } from "../util/sanitize.js";
@@ -58,6 +59,25 @@ export interface DiscussionFlags {
   json?: boolean;
   limit?: string;
   offset?: string;
+  dryRun?: boolean;
+}
+
+/**
+ * How much of the body a dry run echoes back. The rehearsal answers "was my body read" (a piped
+ * `--content -` in particular), not "print it again": a count plus the opening is enough.
+ */
+const DRY_RUN_CONTENT_PREVIEW_CHARS = 120;
+
+/**
+ * Cuts on code points, not UTF-16 units: `slice` on the string could split an emoji's surrogate
+ * pair and leave a lone half at the end of the preview (`\ud83d` in JSON, a replacement glyph on
+ * a terminal).
+ */
+function contentPreview(content: string): string {
+  const codePoints = Array.from(content);
+  return codePoints.length <= DRY_RUN_CONTENT_PREVIEW_CHARS
+    ? content
+    : `${codePoints.slice(0, DRY_RUN_CONTENT_PREVIEW_CHARS).join("")}…`;
 }
 
 async function readStdin(): Promise<string> {
@@ -242,8 +262,7 @@ export async function runDiscussionLs(flags: DiscussionFlags): Promise<void> {
     const footer = paginationFooter(res.offset, res.posts.length, res.total, res.limit);
     if (footer) console.log(pc.dim(footer));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -293,8 +312,7 @@ export async function runDiscussionRead(postId: string, flags: DiscussionFlags):
 
     console.log(renderThread(effectiveRoot, posts));
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -324,16 +342,38 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
   const cfg = await loadConfig();
   try {
     if (!flags.title || !flags.title.trim()) {
-      console.error(pc.red("--title is required and must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--title is required and must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const category = validateCategory(flags.category);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
-      console.error(pc.red("--content must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--content must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
+      return;
+    }
+
+    // After `--content -` has been read: confirming the piped body arrived (and how long it is)
+    // is what this rehearsal is for. Reading stdin is local; nothing remote changes.
+    if (flags.dryRun) {
+      const title = flags.title!.trim();
+      reportDryRun(flags, {
+        action: "discussion.post",
+        target: {
+          project: projectId,
+          title,
+          category,
+          contentChars: content.length,
+          contentPreview: contentPreview(content),
+        },
+        summary: `would create thread "${title}" in ${category} (${content.length} chars of body).`,
+      });
       return;
     }
 
@@ -349,8 +389,7 @@ export async function runDiscussionPost(flags: DiscussionFlags): Promise<void> {
       console.log(pc.dim(AI_NOTE));
     }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -364,8 +403,10 @@ export async function runDiscussionReply(
     const projectId = resolveActiveProject(cfg, flags.project);
     const content = (await resolveContent(flags.content)).trim();
     if (!content) {
-      console.error(pc.red("--content must be non-empty."));
-      process.exitCode = 1;
+      reportError(new Error("--content must be non-empty."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
 
@@ -376,6 +417,22 @@ export async function runDiscussionReply(
     const parentId = isUuid(parentPostId)
       ? parentPostId
       : (await resolveByPrefix(parentPostId, () => fetchPosts(projectId), "post")).id;
+
+    // After the parent resolves: replying under the wrong thread is the one way this command
+    // does damage, and an 8-char prefix is exactly where that goes wrong.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "discussion.reply",
+        target: {
+          project: projectId,
+          parentId,
+          contentChars: content.length,
+          contentPreview: contentPreview(content),
+        },
+        summary: `would reply to ${shortId(parentId)} (${content.length} chars of body).`,
+      });
+      return;
+    }
 
     const created = await apiFetch<CreatedRow>(
       `/api/projects/${encodeURIComponent(projectId)}/discussion`,
@@ -390,17 +447,13 @@ export async function runDiscussionReply(
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`Parent post ${sanitizeInline(parentPostId)} not found.`));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: `Parent post ${sanitizeInline(parentPostId)} not found.`,
+      });
       return;
     }
-    if (err instanceof Error && /No post matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -412,8 +465,8 @@ export const DISCUSSION_HELP = {
     "Usage:",
     "  synchain discussion ls [--limit <n>] [--offset <n>] [--project <p>] [--json]",
     "  synchain discussion read <postId> [--project <p>] [--json]",
-    "  synchain discussion post --title <t> --content <c|-> [--category <c>] [--project <p>] [--json]",
-    "  synchain discussion reply <postId> --content <c|-> [--project <p>] [--json]",
+    "  synchain discussion post --title <t> --content <c|-> [--category <c>] [--project <p>] [--json] [--dry-run]",
+    "  synchain discussion reply <postId> --content <c|-> [--project <p>] [--json] [--dry-run]",
     "",
     "Categories: mix, master, art, release, vocal, general (default general).",
     "`--content -` reads the post body from stdin (handy for piping in a file).",

@@ -9,12 +9,16 @@ import mime from "mime-types";
 import {
   apiFetch,
   ApiError,
-  formatApiError,
-  withErrorBody,
+  apiErrorFor,
+  readJsonOrText,
+  reportError,
   resolveActiveProject,
   wantsJson,
+  wantsStructuredOutput,
+  withErrorBody,
 } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { renderTable } from "../util/table.js";
 import { Progress } from "../util/progress.js";
 import { promptConfirm } from "../util/prompt.js";
@@ -61,6 +65,7 @@ export interface FilesFlags {
   out?: string;
   to?: string;
   yes?: boolean;
+  dryRun?: boolean;
 }
 
 // Mirrors the server's file-name rule (no path separators, no control chars). A local
@@ -68,6 +73,19 @@ export interface FilesFlags {
 // final say.
 // eslint-disable-next-line no-control-regex
 const CLIENT_NAME_FORBIDDEN_RE = /[\\/\x00-\x1f\x7f]/;
+
+/**
+ * A URL without its query string or fragment. A presigned storage URL carries its write
+ * credential in the query, and an error envelope ends up in logs.
+ */
+function redactQuery(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "";
+  }
+}
 
 function extOf(name: string): string {
   const idx = name.lastIndexOf(".");
@@ -241,8 +259,7 @@ export async function runFilesLs(flags: FilesFlags): Promise<void> {
       )
     );
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -254,17 +271,21 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     const absPath = path.resolve(localPath);
     const stat = await fs.stat(absPath);
     if (!stat.isFile()) {
-      console.error(pc.red(`Not a regular file: ${sanitizeInline(absPath)}`));
-      process.exitCode = 1;
+      reportError(new Error(`Not a regular file: ${sanitizeInline(absPath)}`), {
+        json: wantsJson(flags),
+        code: "not_a_file",
+      });
       return;
     }
     // The server's upload-url validation rejects size=0 with an opaque "invalid_query";
     // pre-check here so an empty placeholder file gets a message that says why.
     if (stat.size === 0) {
-      console.error(
-        pc.red(`Cannot upload an empty (0-byte) file: ${sanitizeInline(absPath)} — empty files aren't supported.`)
+      reportError(
+        new Error(
+          `Cannot upload an empty (0-byte) file: ${sanitizeInline(absPath)} — empty files aren't supported.`
+        ),
+        { json: wantsJson(flags), code: "empty_file" }
       );
-      process.exitCode = 1;
       return;
     }
     const fileName = path.basename(absPath);
@@ -284,6 +305,35 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       `/api/projects/${encodeURIComponent(projectId)}/files/upload-url?${qs.toString()}`
     );
 
+    // --dry-run stops after the presign GET, so the rehearsal has already been through the
+    // server's scope, size-cap and folder checks (a 403, 413 or 400 surfaces here). Those are
+    // the checks an agent most needs before sending gigabytes, and only the server can run them.
+    //
+    // This relies on upload-url being a GET without side effects: it signs a ticket and records
+    // nothing (no pending row, no quota hold). 0.5.1 shipped the same short-circuit in the same
+    // place. If the endpoint ever starts writing on that GET, this short-circuit has to
+    // move above it.
+    //
+    // The presigned URL is a write credential. It is never printed, and it is dropped unused
+    // here; it stays valid until it expires.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.upload",
+        target: {
+          project: projectId,
+          localPath: absPath,
+          file: { name: fileName, size: stat.size, mimeType },
+          folderId: resolvedFolderId,
+          storageKey: upload.key,
+        },
+        summary:
+          `would upload ${fileName} (${formatBytes(stat.size)}) to ` +
+          `${resolvedFolderId ? `folder ${shortId(resolvedFolderId)}` : "the project root"}; ` +
+          `the server accepted the upload request.`,
+      });
+      return;
+    }
+
     // 2. PUT the file body to the presigned URL. The Content-Type MUST match the
     //    `type` the URL was signed with, or the storage endpoint rejects the PUT.
     // Sanitized like the completion line 29 lines below -- and more urgently: `Progress.render`
@@ -292,6 +342,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
     const progress = new Progress({
       total: stat.size,
       label: `uploading ${sanitizeInline(fileName)}`,
+      quiet: wantsStructuredOutput(flags),
     });
     const guard = stallGuard(60_000, "upload");
     const fileStream = createReadStream(absPath);
@@ -316,9 +367,13 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       // Same treatment as `formatApiError`, and for a slightly wider trust boundary: this body
       // does not come from the configured API host at all, but from whatever host that API
       // handed back in `upload.uploadUrl`. It bypasses `formatApiError`, so it needs the shared
-      // renderer explicitly -- sanitized, indented, and capped.
-      console.error(pc.red(withErrorBody(`Storage PUT failed: ${putRes.status}`, text)));
-      process.exitCode = 1;
+      // renderer explicitly -- sanitized, indented, and capped. The envelope gets the storage
+      // URL without its query: that query is the presigned write credential.
+      reportError(apiErrorFor(putRes.status, redactQuery(upload.uploadUrl), text), {
+        json: wantsJson(flags),
+        message: withErrorBody(`Storage PUT failed: ${putRes.status}`, text),
+        code: "storage_put_failed",
+      });
       return;
     }
     progress.finish(`uploaded ${sanitizeInline(fileName)} (${formatBytes(stat.size)})`);
@@ -344,12 +399,19 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       // scope revoked mid-flight, folder deleted, …). Surface the orphaned key so
       // the user understands a retry re-uploads the bytes and the stray object is
       // reclaimed by server-side cleanup — then let the outer handler print the error.
-      process.stderr.write(
-        pc.yellow(
-          `\nNote: the bytes were uploaded to storage (key: ${sanitizeInline(upload.key)}) but registering the file ` +
-            `record failed. Retrying re-uploads the bytes; the orphaned object is reclaimed server-side.\n`
-        )
-      );
+      const storageKey = sanitizeInline(upload.key);
+      const note =
+        `the bytes were uploaded to storage (key: ${storageKey}) but registering the file ` +
+        `record failed. Retrying re-uploads the bytes; the orphaned object is reclaimed server-side.`;
+      // Structured stderr: its own JSON line, ahead of the error envelope -- a prose line here
+      // would be the one line on stderr that does not parse.
+      if (wantsStructuredOutput(flags)) {
+        process.stderr.write(
+          `${JSON.stringify({ warning: { code: "orphaned_upload_key", storageKey, detail: note } })}\n`
+        );
+      } else {
+        process.stderr.write(pc.yellow(`\nNote: ${note}\n`));
+      }
       throw err;
     }
 
@@ -359,8 +421,7 @@ export async function runFilesUpload(localPath: string, flags: FilesFlags): Prom
       console.log(pc.green(`Created file ${sanitizeInline(created.file.id)}`));
     }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -421,8 +482,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
     }
     if (!res.ok) {
       guard.clear();
-      const body = await res.text().catch(() => "");
-      throw new ApiError(res.status, url, body);
+      throw apiErrorFor(res.status, url, await readJsonOrText(res));
     }
     if (!res.body) {
       guard.clear();
@@ -465,6 +525,7 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
     const progress = new Progress({
       total,
       label: `downloading ${toStdout ? "(stdout)" : sanitizeInline(path.basename(absOut ?? fallbackName))}`,
+      quiet: wantsStructuredOutput(flags),
     });
 
     const nodeStream = Readable.fromWeb(
@@ -486,21 +547,17 @@ export async function runFilesDownload(fileId: string, flags: FilesFlags): Promi
       progress.finish(`downloaded to ${sanitizeInline(absOut)}`);
     }
   } catch (err) {
-    if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
 
 export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<void> {
   if (!flags.to) {
-    console.error(pc.red("--to <folderId|root> is required"));
-    process.exitCode = 1;
+    reportError(new Error("--to <folderId|root> is required"), {
+      json: wantsJson(flags),
+      code: "missing_option",
+    });
     return;
   }
   const cfg = await loadConfig();
@@ -508,6 +565,25 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
     const projectId = resolveActiveProject(cfg, flags.project);
     const resolved = await resolveFile(projectId, fileId);
     const folderId = flags.to === "root" ? null : await resolveFolderId(projectId, flags.to);
+
+    // After both resolutions, before the write: which records the prefixes landed on is the
+    // whole point of the rehearsal.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.mv",
+        target: {
+          project: projectId,
+          file: { id: resolved.id, name: resolved.name, folderId: resolved.folderId },
+          to: folderId,
+        },
+        summary:
+          `would move ${resolved.name} (${shortId(resolved.id)}) from ` +
+          `${resolved.folderId ? `folder ${shortId(resolved.folderId)}` : "root"} to ` +
+          `${folderId ? `folder ${shortId(folderId)}` : "root"}.`,
+      });
+      return;
+    }
+
     const result = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "PATCH", body: { folderId } }
@@ -522,13 +598,7 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
       );
     }
   } catch (err) {
-    if (err instanceof Error && /No (file|folder) matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -536,27 +606,56 @@ export async function runFilesMv(fileId: string, flags: FilesFlags): Promise<voi
 export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<void> {
   const cfg = await loadConfig();
   if (!cfg?.token) {
-    console.error(pc.red("Not logged in. Run `synchain login`."));
-    process.exitCode = 1;
+    reportError(new Error("Not logged in. Run `synchain login`."), {
+      json: wantsJson(flags),
+      code: "unauthenticated",
+    });
     return;
   }
   try {
     const projectId = resolveActiveProject(cfg, flags.project);
 
-    // 1. Resolve 8-char prefix → full record via a project-wide files walk.
-    let resolved: FileDTO;
-    try {
-      resolved = await resolveFile(projectId, fileId);
-    } catch (err) {
-      if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
-        console.error(pc.red(err.message));
-        process.exitCode = 1;
-        return;
-      }
-      throw err;
+    // 0. Without a terminal nobody can answer the confirmation in step 3. Asking anyway made
+    //    `prompts` read EOF as "no" (or wait on a pipe that never answers): nothing was deleted,
+    //    a bare "Cancelled." went to stdout even under --json, and the exit code was 0 -- which
+    //    a script reads as "deleted". So refuse up front, before any request, the way a
+    //    non-interactive `login` without SYNCHAIN_TOKEN does. --dry-run needs no confirmation.
+    if (!flags.yes && !flags.dryRun && process.stdin.isTTY !== true) {
+      reportError(
+        new Error(
+          "Not deleted: stdin is not a terminal, so the confirmation cannot be answered. Pass --yes to delete (preview first with --dry-run)."
+        ),
+        { json: wantsJson(flags), code: "confirmation_required" }
+      );
+      return;
     }
 
-    // 2. Confirm (skipped with --yes for non-interactive use).
+    // 1. Resolve 8-char prefix → full record via a project-wide files walk.
+    const resolved = await resolveFile(projectId, fileId);
+
+    // 2. --dry-run stops after resolution and BEFORE the confirmation: nothing will be deleted,
+    //    so there is nothing to confirm -- and without a TTY promptConfirm answers false, which
+    //    would leave a scripted preview printing only "Cancelled.".
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.rm",
+        target: {
+          project: projectId,
+          file: {
+            id: resolved.id,
+            name: resolved.name,
+            size: resolved.size,
+            folderId: resolved.folderId,
+          },
+        },
+        summary:
+          `would delete ${resolved.name} (${shortId(resolved.id)}, ` +
+          `${formatBytes(resolved.size)}) from project ${projectId}.`,
+      });
+      return;
+    }
+
+    // 3. Confirm (skipped with --yes; only reached on a terminal, see step 0).
     if (!flags.yes) {
       const ok = await promptConfirm(
         `Delete ${sanitizeInline(resolved.name)} (${shortId(resolved.id)})?`,
@@ -568,15 +667,18 @@ export async function runFilesRm(fileId: string, flags: FilesFlags): Promise<voi
       }
     }
 
-    // 3. DELETE the file (server removes the stored object then the row).
+    // 4. DELETE the file (server removes the stored object then the row).
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(resolved.id)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
+    if (wantsJson(flags)) {
+      console.log(JSON.stringify({ deleted: { id: resolved.id, name: resolved.name } }, null, 2));
+    } else {
+      console.log(pc.green(`Deleted ${sanitizeInline(resolved.name)} (${shortId(resolved.id)}).`));
+    }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -593,36 +695,52 @@ export async function runFilesRename(
     // Client-side validation — snappy errors for cases that need no round-trip.
     // The server has the final say (≤255 chars, forbidden chars, extension lock).
     if (!newName || newName.length === 0) {
-      console.error(pc.red("New name cannot be empty."));
-      process.exitCode = 1;
+      reportError(new Error("New name cannot be empty."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
     if (newName.length > 255) {
-      console.error(pc.red("New name is too long (max 255 chars)."));
-      process.exitCode = 1;
+      reportError(new Error("New name is too long (max 255 chars)."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
     if (CLIENT_NAME_FORBIDDEN_RE.test(newName)) {
-      console.error(pc.red("Invalid name — no path separators or control characters."));
-      process.exitCode = 1;
+      reportError(new Error("Invalid name — no path separators or control characters."), {
+        json: wantsJson(flags),
+        code: "invalid_name",
+      });
       return;
     }
 
-    let resolved: FileDTO;
-    try {
-      resolved = await resolveFile(projectId, fileId);
-    } catch (err) {
-      if (err instanceof Error && /No file matches|prefix.*ambiguous/.test(err.message)) {
-        console.error(pc.red(err.message));
-        process.exitCode = 1;
-        return;
+    const resolved = await resolveFile(projectId, fileId);
+
+    // Extension sanity check (warn only — the server's 422 is the source of truth). In
+    // structured mode it is a JSON line, so that every line on stderr still parses.
+    const note = extensionWarning(resolved.name, newName);
+    if (note) {
+      if (wantsStructuredOutput(flags)) {
+        process.stderr.write(
+          `${JSON.stringify({ warning: { code: "extension_mismatch", detail: note } })}\n`
+        );
+      } else {
+        process.stderr.write(pc.yellow(`${note}\n`));
       }
-      throw err;
     }
 
-    // Extension sanity check (warn only — the server's 422 is the source of truth).
-    const note = extensionWarning(resolved.name, newName);
-    if (note) process.stderr.write(pc.yellow(`${note}\n`));
+    // After the extension warning: that warning is one of the most useful things a rehearsal
+    // of a rename can show.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "files.rename",
+        target: { project: projectId, file: { id: resolved.id, name: resolved.name }, newName },
+        summary: `would rename ${resolved.name} → ${newName} (id: ${shortId(resolved.id)}).`,
+      });
+      return;
+    }
 
     try {
       const result = await apiFetch<{ file: FileDTO }>(
@@ -640,22 +758,23 @@ export async function runFilesRename(
       );
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
-        console.error(
-          pc.red("Extension cannot be changed. Use the same extension as the original.")
-        );
-        process.exitCode = 1;
+        reportError(err, {
+          json: wantsJson(flags),
+          message: "Extension cannot be changed. Use the same extension as the original.",
+        });
         return;
       }
       if (err instanceof ApiError && err.status === 404) {
-        console.error(pc.red(`File ${sanitizeInline(resolved.id)} not found.`));
-        process.exitCode = 1;
+        reportError(err, {
+          json: wantsJson(flags),
+          message: `File ${sanitizeInline(resolved.id)} not found.`,
+        });
         return;
       }
       throw err;
     }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }

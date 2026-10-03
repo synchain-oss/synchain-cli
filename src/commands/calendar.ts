@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 import pc from "picocolors";
-import { apiFetch, ApiError, formatApiError, resolveActiveProject, wantsJson } from "../api.js";
+import { apiFetch, ApiError, reportError, resolveActiveProject, wantsJson } from "../api.js";
 import { loadConfig } from "../config.js";
+import { reportDryRun } from "../dry-run.js";
 import { renderTable } from "../util/table.js";
 import { isUuid, resolveByPrefix } from "../util/resolve-id.js";
 import { sanitizeInline, shortId } from "../util/sanitize.js";
@@ -56,6 +57,7 @@ export interface CalendarFlags {
   to?: string;
   project?: string;
   json?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -116,39 +118,62 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
   const cfg = await loadConfig();
   try {
     if (!flags.title || !flags.title.trim()) {
-      console.error(pc.red("--title is required."));
-      process.exitCode = 1;
+      reportError(new Error("--title is required."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     if (!flags.start) {
-      console.error(pc.red("--start is required."));
-      process.exitCode = 1;
+      reportError(new Error("--start is required."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     if (!flags.end) {
-      console.error(pc.red("--end is required."));
-      process.exitCode = 1;
+      reportError(new Error("--end is required."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     const projectId = resolveActiveProject(cfg, flags.project);
     const tag = validateTag(flags.tag);
     if (tag === "custom" && !flags.customTag?.trim()) {
-      console.error(pc.red("--custom-tag is required when --tag is custom."));
-      process.exitCode = 1;
+      reportError(new Error("--custom-tag is required when --tag is custom."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
 
     const startTime = parseDateInput(flags.start!);
     const endTime = parseDateInput(flags.end!);
     if (new Date(endTime) <= new Date(startTime)) {
-      console.error(pc.red("End time must be after start time."));
-      process.exitCode = 1;
+      reportError(new Error("End time must be after start time."), {
+        json: wantsJson(flags),
+        code: "invalid_time_range",
+      });
       return;
     }
 
     const body: Record<string, unknown> = { title: flags.title!.trim(), startTime, endTime, tag };
     if (flags.desc !== undefined) body.description = flags.desc;
     if (tag === "custom") body.customTag = flags.customTag!.trim();
+
+    // After validation and date normalisation: the most useful thing a rehearsal of `add` shows
+    // is which instant a local "2026-06-01 10:00" was read as. `target.event` is the POST body.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.add",
+        target: { project: projectId, event: body },
+        summary:
+          `would create event ${String(body.title)} ` +
+          `(${formatLocal(startTime)} → ${formatLocal(endTime)}, tag ${tag}).`,
+      });
+      return;
+    }
 
     const result = await apiFetch<ScheduleEventResponse>(
       `/api/projects/${encodeURIComponent(projectId)}/schedule`,
@@ -165,8 +190,7 @@ export async function runCalendarAdd(flags: CalendarFlags): Promise<void> {
       );
     }
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -218,8 +242,7 @@ export async function runCalendarLs(flags: CalendarFlags): Promise<void> {
       )
     );
   } catch (err) {
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -260,12 +283,12 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
       flags.start === undefined &&
       flags.end === undefined
     ) {
-      console.error(
-        pc.red(
+      reportError(
+        new Error(
           "Nothing to update — pass at least one of --title, --start, --end, --desc, --tag, --custom-tag."
-        )
+        ),
+        { json: wantsJson(flags), code: "nothing_to_update" }
       );
-      process.exitCode = 1;
       return;
     }
 
@@ -275,27 +298,31 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     const startTime = flags.start !== undefined ? parseDateInput(flags.start) : event.startTime;
     const endTime = flags.end !== undefined ? parseDateInput(flags.end) : event.endTime;
     if (new Date(endTime) <= new Date(startTime)) {
-      console.error(pc.red("End time must be after start time."));
-      process.exitCode = 1;
+      reportError(new Error("End time must be after start time."), {
+        json: wantsJson(flags),
+        code: "invalid_time_range",
+      });
       return;
     }
     const customTag =
       flags.customTag !== undefined ? flags.customTag.trim() : (event.customTag ?? undefined);
     if (tag === "custom" && !customTag) {
-      console.error(pc.red("--custom-tag is required when the tag is custom."));
-      process.exitCode = 1;
+      reportError(new Error("--custom-tag is required when the tag is custom."), {
+        json: wantsJson(flags),
+        code: "missing_option",
+      });
       return;
     }
     // Guard the inverse: --custom-tag on a non-custom event would be silently dropped
     // from the PATCH body below yet still print "Updated" — a false success. Fail loudly.
     if (flags.customTag !== undefined && tag !== "custom") {
-      console.error(
-        pc.red(
+      reportError(
+        new Error(
           `--custom-tag only applies to custom-tagged events (this event's tag is "${sanitizeInline(tag)}"). ` +
             "Pass --tag custom together with --custom-tag."
-        )
+        ),
+        { json: wantsJson(flags), code: "invalid_option" }
       );
-      process.exitCode = 1;
       return;
     }
 
@@ -309,6 +336,22 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     if (description !== null && description !== undefined) body.description = description;
     if (tag === "custom") body.customTag = customTag;
 
+    // After resolve, merge and validate: `changes` is the full body PATCH would send.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.edit",
+        target: {
+          project: projectId,
+          event: { id: event.id, title: event.title, tag: event.tag },
+          changes: body,
+        },
+        summary:
+          `would update event ${shortId(event.id)} (${event.title}) to ${String(body.title)} ` +
+          `(${formatLocal(startTime)} → ${formatLocal(endTime)}, tag ${tag}).`,
+      });
+      return;
+    }
+
     const result = await apiFetch<ScheduleEventResponse>(
       `/api/projects/${encodeURIComponent(projectId)}/schedule/${encodeURIComponent(event.id)}`,
       { method: "PATCH", body }
@@ -321,17 +364,13 @@ export async function runCalendarEdit(eventId: string, flags: CalendarFlags): Pr
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
-      console.error(pc.red("Only the creator or a project admin can edit this event."));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: "Only the creator or a project admin can edit this event.",
+      });
       return;
     }
-    if (err instanceof Error && /No event matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -346,32 +385,47 @@ export async function runCalendarRm(eventId: string, flags: CalendarFlags): Prom
     const resolvedId = isUuid(eventId)
       ? eventId
       : (await resolveByPrefix(eventId, () => fetchAllEventsForResolve(projectId), "event")).id;
+
+    // Same resolution path as the real run, minus the DELETE. A full UUID is not looked up:
+    // there is no single-event GET, and the +-1 year window would miss events outside it,
+    // reporting "no such event" for one the real DELETE would remove.
+    if (flags.dryRun) {
+      reportDryRun(flags, {
+        action: "calendar.rm",
+        target: { project: projectId, event: { id: resolvedId } },
+        summary: `would delete event ${shortId(resolvedId)} from project ${projectId}.`,
+      });
+      return;
+    }
+
     await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/schedule/${encodeURIComponent(resolvedId)}`,
       { method: "DELETE" }
     );
-    console.log(pc.green(`Deleted event ${shortId(resolvedId)}.`));
+    if (wantsJson(flags)) {
+      console.log(JSON.stringify({ deleted: { id: resolvedId } }, null, 2));
+    } else {
+      console.log(pc.green(`Deleted event ${shortId(resolvedId)}.`));
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
-      console.error(pc.red("Only the creator or a project admin can delete this event."));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: "Only the creator or a project admin can delete this event.",
+      });
       return;
     }
     // The full-UUID short-circuit hits DELETE without resolving first, so a missing
     // event surfaces as the endpoint's 404 rather than resolveByPrefix's "No event
     // matches". Map it to the same friendly message the prefix path prints.
     if (err instanceof ApiError && err.status === 404) {
-      console.error(pc.red(`No event matches "${sanitizeInline(eventId)}".`));
-      process.exitCode = 1;
+      reportError(err, {
+        json: wantsJson(flags),
+        message: `No event matches "${sanitizeInline(eventId)}".`,
+      });
       return;
     }
-    if (err instanceof Error && /No event matches|prefix.*ambiguous/.test(err.message)) {
-      console.error(pc.red(err.message));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(pc.red(formatApiError(err)));
-    process.exitCode = 1;
+    reportError(err, { json: wantsJson(flags) });
     return;
   }
 }
@@ -381,13 +435,13 @@ export const CALENDAR_HELP = {
   summary: "Create, list, edit, and remove calendar events.",
   body: [
     "Usage:",
-    "  synchain calendar add --title <t> --start <date> --end <date>",
+    "  synchain calendar add --title <t> --start <date> --end <date> [--dry-run]",
     "                        [--desc <d>] [--tag <tag>] [--custom-tag <c>]",
     "                        [--project <p>] [--json]",
     "  synchain calendar ls [--from <date>] [--to <date>] [--project <p>] [--json]",
-    "  synchain calendar edit <eventId> [--title] [--start] [--end] [--desc] [--tag]",
+    "  synchain calendar edit <eventId> [--title] [--start] [--end] [--desc] [--tag] [--dry-run]",
     "                                    [--custom-tag] [--project <p>] [--json]",
-    "  synchain calendar rm <eventId> [--project <p>]",
+    "  synchain calendar rm <eventId> [--project <p>] [--json] [--dry-run]",
     "",
     "Tags: meeting, mix, master, vocal, review, release, arrange, harmony, custom.",
     "Use --custom-tag with `--tag custom` for a free-text label.",
@@ -396,5 +450,7 @@ export const CALENDAR_HELP = {
     "(parsed in your machine's timezone). `ls` defaults to the next 30 days.",
     "",
     "Only the event creator or a project admin may edit or remove an event.",
+    "`--dry-run` on add/edit/rm validates and resolves, then prints the exact body or",
+    "id it would send, and sends no write (see `synchain help safety`).",
   ].join("\n"),
 };
