@@ -696,6 +696,25 @@ describe("README.md", () => {
     expect(english, "English half").toContain(token);
     expect(chinese, "Chinese half").toContain(token);
   });
+
+  it("gives one runnable Quickstart sequence, the same in both halves", () => {
+    // The commands of the first bash block, comments and blank lines dropped.
+    const commands = (body: string): string[] =>
+      fencedBlocks(body, "bash")[0]!
+        .split("\n")
+        .map((line) => line.replace(/#.*$/, "").trim())
+        .filter(Boolean);
+    const en = commands(section(english, /^Quickstart$/));
+    const zh = commands(section(chinese, /^快速上手$/));
+    expect(en[0]).toBe("npm install -g @synchain/cli");
+    expect(en).toContain(TREE.auth.login.interactive);
+    expect(en).toContain(TREE.auth.verify.online);
+    expect(en[en.length - 1]).toMatch(/^synchain files upload /);
+    expect(zh).toEqual(en);
+    // The non-interactive login is shown too, in both halves.
+    expect(english).toContain(TREE.auth.login.nonInteractive);
+    expect(chinese).toContain(TREE.auth.login.nonInteractive);
+  });
 });
 
 describe("CHANGELOG.md, 0.9.0", () => {

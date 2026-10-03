@@ -50,8 +50,12 @@
 - **`docs/install-for-agents.md`**:§1 根节点字段列表补 `auth`、`environment`;§2 补一句「`--help`
   与 `jq .auth` 给出同样的信息」;§10 汇总表补 `XDG_CONFIG_HOME` / `APPDATA` 一行(与 reference
   的环境变量表、与 `environment` 对齐)。
+- **`README.md`**:英文 `## Quick start` 改为 `## Quickstart`,中文「快速上手」同步;两边都是同一条
+  从 `npm install -g @synchain/cli` 经 `login`、`whoami`、`project ls`、`project use` 到
+  `files upload` 的完整序列,并给出无终端时的 `SYNCHAIN_TOKEN=synch_live_sk_… synchain login`。
+  标题层级两侧对称。
 - **`CHANGELOG.md`**:新建 `## Unreleased`,Added 记 help 三段、命令树两个字段与 `CommandTree`
-  类型的变化。
+  类型的变化,Changed 记 README Quickstart。
 - **测试**:
   - `src/__tests__/help-json.test.ts`:根节点有 `auth` / `environment` 且只在根节点、位于
     `commands` 之前;stdout 仍是一份可解析的 JSON;`auth` 里的命令行都指向真实存在的命令;
@@ -62,7 +66,7 @@
   - `src/__tests__/docs-consistency.test.ts`:字段表比对时把 `auth`、`environment` 与 `version`
     一起当作仅根节点字段排除,并另行断言根节点有这三个字段、正文提到了它们、`auth` /
     `environment` 的每一层字段名都在正文里;reference 与 install-for-agents 的环境变量表都与
-    `environment` 一致;本记录文件存在且写明
+    `environment` 一致;README 两半的 Quickstart 命令序列相同;本记录文件存在且写明
     contract-impact。
   - `src/__tests__/default-base-url.test.ts`:`help-auth.ts` 加入「面向用户、不得写死主机名」的
     文件清单。

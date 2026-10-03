@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The exported `CommandTree` type declares the two new root fields (`auth`, `environment`) as
   required. No new type names are exported.
 
+### Changed
+- README: the quick start is now a single Quickstart sequence that runs from
+  `npm install -g @synchain/cli` through `login`, `whoami` and `project use` to a first upload, in
+  both the English and the Chinese half.
+
 ## 0.9.0 - 2026-10-01
 
 ### Restored
