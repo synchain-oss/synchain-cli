@@ -17,7 +17,7 @@ import type { CommandTree } from "./help-json.js";
 
 /**
  * Env var used by CI / agents to pass a CLI key without an argv flag. Only `login` takes the key
- * from it; `doctor` reads it too, but only to warn when it differs from the stored key.
+ * from it; `doctor` reads it too, but only to check it against the stored key and point at `login`.
  */
 export const TOKEN_ENV_VAR = "SYNCHAIN_TOKEN";
 

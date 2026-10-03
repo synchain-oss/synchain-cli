@@ -414,8 +414,8 @@ in before any of them fails with `401`:
 - `credential` — what the key is, its shape elided (`CLI key (synch_live_sk_…)`).
 - `env` — `"SYNCHAIN_TOKEN"`, the variable a non-interactive `login` reads the key from.
 - `envReadBy` — the commands that take the key from `env`: `["login"]`. Every other command uses
-  the stored key; `synchain doctor` looks at `env` too, but only to warn when it holds a different
-  key from the stored one.
+  the stored key; `synchain doctor` looks at `env` too, but only to check it against the stored
+  key (its `credential` check, see [`synchain doctor`](#synchain-doctor)).
 - `login` — `interactive` is the command on a terminal (it prompts, input hidden);
   `nonInteractive` is the same with the key in `env`, for CI and agents.
 - `obtain` — `url` is the settings page of the default host, and `steps` says where on it a key

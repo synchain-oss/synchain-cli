@@ -51,7 +51,7 @@ export interface CommandTree extends CommandTreeNode {
     env: string;
     /**
      * The commands that take the key from `env`; every other command uses the stored key.
-     * (`doctor` looks at `env` too, only to warn when it holds a different key.)
+     * (`doctor` looks at `env` too, but only to check it against the stored key.)
      */
     envReadBy: string[];
     /** Command lines that log in: on a terminal (prompts), and without one (no prompt). */
