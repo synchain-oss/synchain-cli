@@ -144,6 +144,9 @@ const AGENTS = "docs/install-for-agents.md";
 /** What `synchain --help --format json` prints. */
 const TREE = buildHelpJson(buildProgram(["node", "synchain"]));
 
+/** Fields only the root of the command tree has. */
+const ROOT_ONLY = ["version", "auth", "environment"] as const;
+
 interface Leaf {
   /** `files rm`, `login`, … */
   path: string;
@@ -380,6 +383,12 @@ describe("docs/reference.md", () => {
       expect(cell).toMatch(/except/);
       expect(ticks(cell).sort()).toEqual(WITHOUT_JSON);
     });
+
+    it("lists exactly the environment variables `--help` lists", () => {
+      const env = table(section(md, /^Global options$/), /^Variable$/);
+      const documented = env.flatMap((r) => ticks(r[0]!)).sort();
+      expect(documented).toEqual(TREE.environment.map((e) => e.name).sort());
+    });
   });
 
   describe("Machine-readable help", () => {
@@ -387,11 +396,33 @@ describe("docs/reference.md", () => {
 
     it("documents exactly the fields a node of the command tree has", () => {
       const keys = new Set(allNodes(TREE).flatMap((n) => Object.keys(n)));
-      keys.delete("version"); // root-only, described in the prose below the table
+      // Root-only, described in the prose below the table.
+      for (const rootOnly of ROOT_ONLY) keys.delete(rootOnly);
       const documented = table(body, /^Field$/).map((r) => ticks(r[0]!)[0]!);
       expect(documented.sort()).toEqual([...keys].sort());
-      expect(Object.keys(TREE)).toContain("version");
-      expect(body).toContain("`version`");
+    });
+
+    it("describes the root-only fields in prose, not as table rows", () => {
+      const documented = table(body, /^Field$/).map((r) => ticks(r[0]!)[0]!);
+      for (const rootOnly of ROOT_ONLY) {
+        expect(Object.keys(TREE), rootOnly).toContain(rootOnly);
+        expect(body, rootOnly).toContain(`\`${rootOnly}\``);
+        expect(documented, rootOnly).not.toContain(rootOnly);
+      }
+      for (const node of allNodes(TREE).slice(1)) {
+        for (const rootOnly of ROOT_ONLY) expect(node, node.name).not.toHaveProperty(rootOnly);
+      }
+    });
+
+    it("names every field of `auth` and `environment`, at every depth", () => {
+      const fieldsOf = (value: unknown): string[] => {
+        if (Array.isArray(value)) return value.flatMap(fieldsOf);
+        if (value === null || typeof value !== "object") return [];
+        return Object.entries(value).flatMap(([key, child]) => [key, ...fieldsOf(child)]);
+      };
+      const fields = [...new Set([...fieldsOf(TREE.auth), ...fieldsOf(TREE.environment)])];
+      expect(fields.length).toBeGreaterThan(ROOT_ONLY.length);
+      expect(fields.filter((field) => !body.includes(`\`${field}\``))).toEqual([]);
     });
 
     it("is right that the help option is left out of `options`", () => {
@@ -538,6 +569,21 @@ describe("docs/install-for-agents.md", () => {
 
   it("lists exactly the --dry-run commands under Safe trial runs", () => {
     expect(commandsIn(section(md, /Safe trial runs/))).toEqual(DRY_RUN_COMMANDS);
+  });
+
+  it("lists exactly the environment variables `--help` lists in its summary table", () => {
+    // The table mixes variables and flags; a variable is the SCREAMING_SNAKE spans.
+    const documented = table(md, /^Variable \/ flag$/)
+      .flatMap((r) => ticks(r[0]!))
+      .filter((t) => /^[A-Z][A-Z0-9_]+$/.test(t))
+      .sort();
+    expect(documented).toEqual(TREE.environment.map((e) => e.name).sort());
+  });
+
+  it("lists the root's `auth` and `environment` where it shows the command tree", () => {
+    const install = section(md, /^1\. Install$/);
+    expect(install).toContain("auth");
+    expect(install).toContain("environment");
   });
 
   it("names exactly the commands without --json in its flag summary", () => {
@@ -727,10 +773,13 @@ describe("context7.json", () => {
 });
 
 describe("frozen-contract record", () => {
-  it("exists for this change and states the HTTP contract impact", () => {
-    const dir = path.join(REPO_ROOT, "docs", "contract-changes");
-    const record = readdirSync(dir).find((f) => /^\d{8}-agent-contract-restored\.md$/.test(f));
-    expect(record, "docs/contract-changes/<YYYYMMDD>-agent-contract-restored.md").toBeDefined();
-    expect(readFileSync(path.join(dir, record!), "utf8")).toContain("contract-impact: none");
-  });
+  it.each(["agent-contract-restored", "help-auth-environment"])(
+    "exists for %s and states the HTTP contract impact",
+    (slug) => {
+      const dir = path.join(REPO_ROOT, "docs", "contract-changes");
+      const record = readdirSync(dir).find((f) => new RegExp(`^\\d{8}-${slug}\\.md$`).test(f));
+      expect(record, `docs/contract-changes/<YYYYMMDD>-${slug}.md`).toBeDefined();
+      expect(readFileSync(path.join(dir, record!), "utf8")).toContain("contract-impact: none");
+    }
+  );
 });

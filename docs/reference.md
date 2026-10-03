@@ -369,7 +369,8 @@ to a command that does not declare it is an unknown option (exit `2`).
 | `--project <id>` | the `files`, `folders`, `calendar`, `discussion` and `members` commands | The project for this one call — a full UUID only (see [Projects](#projects)). |
 | `--yes` | `files rm`, `logout` | Skip the confirmation prompt. A script deleting a file needs it: without a terminal and without `--yes`, `files rm` deletes nothing and fails with exit `2` (`confirmation_required`). `logout` does not ask when stdin is not a terminal. |
 
-Environment variables:
+Environment variables (`synchain --help` lists the same ones, and the
+[command tree](#machine-readable-help) carries them as `environment`):
 
 | Variable | Effect |
 | --- | --- |
@@ -384,6 +385,7 @@ Environment variables:
 ```bash
 synchain --help --format json                          # the whole command tree, on stdout
 synchain --help --format json | jq -r '.commands[].name'
+synchain --help --format json | jq '.auth'             # how to get a key and log in
 ```
 
 In JSON mode `--help` on any subcommand prints the same whole tree, so one call is enough to
@@ -404,6 +406,28 @@ Every node in the tree has these fields:
 
 The root also carries `version` (the installed CLI version), so an agent can check that a
 feature it needs is there before calling it.
+
+Next to it the root carries `auth`, so the call that lists the commands also says how to log
+in before any of them fails with `401`:
+
+- `scheme` — `"Bearer"`: the key travels as `Authorization: Bearer <key>`.
+- `credential` — what the key is, its shape elided (`CLI key (synch_live_sk_…)`).
+- `env` — `"SYNCHAIN_TOKEN"`, the variable a non-interactive `login` reads the key from.
+- `envReadBy` — the commands that read `env`: `["login"]`. Every other command uses the stored
+  key.
+- `login` — `interactive` is the command on a terminal (it prompts, input hidden);
+  `nonInteractive` is the same with the key in `env`, for CI and agents.
+- `obtain` — `url` is the settings page of the default host, and `steps` says where on it a key
+  is generated (it is shown once).
+- `verify` — `offline` is `synchain doctor` (sends nothing); `online` is `synchain whoami`
+  (asks the server whether the key is valid).
+
+And `environment`: `[{ "name": "SYNCHAIN_TOKEN", "description": "…" }, …]`, every environment
+variable the CLI reads, the same list as the table under [Global options](#global-options).
+
+The text `synchain --help` prints the same information after the command list, in
+`Authentication:`, `Environment:` and `Examples:` blocks. In JSON mode nothing is printed after
+the document, so stdout stays one parseable value.
 
 Help is recognised as an option, not by scanning the command line: an option **value** that
 happens to be `-h` (e.g. `discussion post --title -h …`) is a value, and the command runs.
