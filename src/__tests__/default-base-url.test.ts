@@ -20,8 +20,16 @@ import { DEFAULT_BASE_URL } from "../config.js";
  */
 const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Files whose text reaches users directly (program.ts holds the commander wiring and `--help`). */
-const USER_FACING = ["program.ts", "commands/help.ts", "commands/login.ts"] as const;
+/**
+ * Files whose text reaches users directly (program.ts holds the commander wiring and `--help`;
+ * help-auth.ts the authentication block of `--help` and its JSON counterpart).
+ */
+const USER_FACING = [
+  "program.ts",
+  "help-auth.ts",
+  "commands/help.ts",
+  "commands/login.ts",
+] as const;
 
 describe("DEFAULT_BASE_URL", () => {
   it("is the platform's own https origin", () => {
@@ -48,7 +56,7 @@ describe("user-facing strings", () => {
     // two would let the exact bug recur: change the default to `https://app.synchain.ca`, spell
     // it out in `help.ts` at the same time, and both `not.toContain`s stay green while the
     // duplication is right back. The property worth holding is "these files never state a host,
-    // they read the constant" -- and all three satisfy it today, so it can be asserted directly
+    // they read the constant" -- and all of them satisfy it today, so it can be asserted directly
     // rather than approximated.
     const hits = src
       .split("\n")

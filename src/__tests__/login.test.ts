@@ -33,6 +33,7 @@ vi.mock("../util/prompt.js", () => ({
 import { DEFAULT_BASE_URL, getConfigPath } from "../config.js";
 import { runHelp } from "../commands/help.js";
 import { runLogin, TOKEN_ENV_VAR } from "../commands/login.js";
+import { AUTH_HELP, KEY_PLACEHOLDER } from "../help-auth.js";
 import { buildProgram } from "../program.js";
 
 // Assembled at runtime: a full-form key literal in the repository is what secret scanning
@@ -412,5 +413,15 @@ describe("`synchain help login`", () => {
     expect(text).toMatch(/not a terminal/);
     expect(text).toMatch(/exits 2/);
     expect(text).toContain(DEFAULT_BASE_URL);
+  });
+
+  it("shows the same unattended lines and key placeholder as `synchain --help`", () => {
+    runHelp("login");
+    const text = plain(stdout.join("\n"));
+    expect(text).toContain(AUTH_HELP.login.nonInteractive);
+    expect(text).toContain(AUTH_HELP.login.nonInteractivePowerShell);
+    // One spelling of the placeholder: the Unicode ellipsis `--help` and the docs use.
+    expect(text).toContain(KEY_PLACEHOLDER);
+    expect(text).not.toContain("synch_live_sk_...");
   });
 });

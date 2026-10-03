@@ -18,16 +18,26 @@ npx @synchain/cli --help
 
 Requires Node.js ≥ 20.
 
-## Quick start
+## Quickstart
 
-Generate a CLI key in the web app under **Settings → CLI Access**, then:
+Generate a CLI key in the web app under
+[**Settings → CLI Access**](https://www.synchain.ca/settings) (it is shown once, so copy it),
+then:
 
 ```bash
-synchain login                       # paste the key (or set SYNCHAIN_TOKEN)
+npm install -g @synchain/cli
+synchain login                       # paste the key at the hidden prompt
+synchain whoami                      # check the key: prints you and your projects
 synchain project ls                  # list projects
-synchain project use <id>            # set the active project
-synchain files upload ./mix.wav      # upload a file
+synchain project use <id>            # set the active project (an id, or the ref column of ls)
+synchain files upload ./mix.wav      # upload a file to it
 ```
+
+Without a terminal (CI, an AI agent), log in with the key in the environment instead —
+`SYNCHAIN_TOKEN=synch_live_sk_… synchain login`, or in PowerShell
+`$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login` — and run the rest unchanged. In CI,
+set `SYNCHAIN_TOKEN` from a secret rather than typing the key: a shell keeps what you type in its
+history. `synchain --help` shows the same steps.
 
 ## Commands at a glance
 
@@ -108,11 +118,18 @@ npm install -g @synchain/cli    # 或 npx @synchain/cli --help
 
 ## 快速上手
 
-在 Web 应用 **Settings → CLI Access** 生成 key 后:
+在 Web 应用的 [**Settings → CLI Access**](https://www.synchain.ca/settings) 生成 CLI key(只显示一次,请当场复制),然后:
 
 ```bash
-synchain login && synchain project use <id> && synchain files upload ./mix.wav
+npm install -g @synchain/cli
+synchain login                       # 在隐藏输入提示里粘贴 key
+synchain whoami                      # 验证 key:打印你的账号与项目
+synchain project ls                  # 列出项目
+synchain project use <id>            # 设为当前项目(id,或 ls 输出的 ref 列)
+synchain files upload ./mix.wav      # 上传文件到该项目
 ```
+
+没有终端时(CI、AI agent),改用环境变量登录:`SYNCHAIN_TOKEN=synch_live_sk_… synchain login`,PowerShell 里写作 `$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login`,其余步骤不变。CI 里请从 secret 注入 `SYNCHAIN_TOKEN`,不要在 shell 里手敲 key:shell 会把敲过的内容留在历史记录里。`synchain --help` 也会列出这些步骤。
 
 ## 命令总览
 

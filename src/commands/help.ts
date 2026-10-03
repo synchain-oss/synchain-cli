@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { reportError, wantsStructuredOutput } from "../api.js";
 import { DEFAULT_BASE_URL } from "../config.js";
+import { nonInteractiveLoginLines } from "../help-auth.js";
 import { sanitizeInline } from "../util/sanitize.js";
 import { CALENDAR_HELP } from "./calendar.js";
 import { DISCUSSION_HELP } from "./discussion.js";
@@ -22,14 +23,16 @@ const TOPICS: Record<string, Topic> = {
       "Usage:",
       "  synchain login",
       "  synchain login --base-url <url>",
-      "  SYNCHAIN_TOKEN=synch_live_sk_... synchain login   # CI / agents",
+      // The same lines as `--help` (src/help-auth.ts): one command, one key placeholder.
+      ...nonInteractiveLoginLines("  ", ["CI / agents", "same, PowerShell"]),
       "",
       `Interactive prompts: base URL (default ${DEFAULT_BASE_URL}) and CLI key.`,
       "The CLI verifies the key via GET /api/user/me and stores it in the OS config",
       "dir (chmod 0600 on POSIX).",
       "",
       "For unattended / CI use, set SYNCHAIN_TOKEN in the environment to skip the",
-      "key prompt. When stdin is not a terminal, login never prompts: the base URL is",
+      "key prompt; in CI, set it from a secret rather than typing the key into a",
+      "shell. When stdin is not a terminal, login never prompts: the base URL is",
       "--base-url, else the stored one, else the default; without SYNCHAIN_TOKEN it",
       "exits 2. The key is never accepted via argv — it would leak into shell history",
       "and /proc/<pid>/cmdline.",

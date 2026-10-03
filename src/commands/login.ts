@@ -2,6 +2,7 @@
 import pc from "picocolors";
 import { apiFetch, ApiError, formatApiError, reportError } from "../api.js";
 import { DEFAULT_BASE_URL, loadConfig, saveConfig, type CliConfig } from "../config.js";
+import { TOKEN_ENV_VAR } from "../help-auth.js";
 import { promptPassword, promptText } from "../util/prompt.js";
 import { sanitizeInline } from "../util/sanitize.js";
 import { assertSafeBaseUrl } from "../util/url.js";
@@ -10,8 +11,9 @@ export interface LoginFlags {
   baseUrl?: string;
 }
 
-/** Env var used by CI / agents to pass a CLI key without an argv flag. */
-export const TOKEN_ENV_VAR = "SYNCHAIN_TOKEN";
+// Defined next to the help that documents it (help-auth.ts), so `--help` cannot name a different
+// variable from the one read below; re-exported here for existing importers.
+export { TOKEN_ENV_VAR };
 
 export interface MeResponse {
   user: {

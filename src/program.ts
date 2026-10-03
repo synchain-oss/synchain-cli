@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 import { EXIT_CODES, reportError, wantsStructuredOutput } from "./api.js";
 import { DEFAULT_BASE_URL, isFirstRun, markWelcomeSeen } from "./config.js";
 import { DRY_RUN_DESC } from "./dry-run.js";
+import { AUTH_HELP_TEXT } from "./help-auth.js";
 import { buildHelpJson } from "./help-json.js";
 import { argvWantsJsonOutput, OUTPUT_FORMATS, resolveOutputFormat } from "./output-format.js";
 import { printWelcomeBanner } from "./commands/welcome.js";
@@ -62,6 +63,14 @@ const DOCS_HELP_TEXT =
   `  ${DOCS_README}\n`;
 
 /**
+ * What the root's text `--help` prints after commander's own: how to authenticate, the
+ * environment it reads and a few examples first (src/help-auth.ts), then where the docs are.
+ * Logging in is the first thing anyone has to do, so it should not take a second command to
+ * find out how.
+ */
+const ROOT_HELP_TEXT = `\n${AUTH_HELP_TEXT}${DOCS_HELP_TEXT}`;
+
+/**
  * @param argv the command line about to be parsed. It only decides how a parse error is written
  *   (see below); parsing itself still happens in `parseAsync`.
  */
@@ -108,9 +117,10 @@ export function buildProgram(argv: readonly string[] = process.argv): Command {
         .choices(OUTPUT_FORMATS)
         .default("text")
     )
-    // Empty in JSON mode: text after the JSON document would make stdout unparseable.
+    // Empty in JSON mode: text after the JSON document would make stdout unparseable. The JSON
+    // tree carries the same authentication data as its root `auth` / `environment`.
     .addHelpText("after", ({ command }) =>
-      resolveOutputFormat(command) === "json" ? "" : DOCS_HELP_TEXT
+      resolveOutputFormat(command) === "json" ? "" : ROOT_HELP_TEXT
     );
 
   // `--format json` means `--json` for every command that declares `--json`. Only for those:
