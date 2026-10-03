@@ -20,11 +20,13 @@ npm install && npm run build && npm link
 To learn the whole command surface in one call, ask for the command tree as JSON:
 
 ```bash
-synchain --help --format json      # { name, version, description, usage, options, commands: [...] }
+synchain --help --format json      # { name, version, description, usage, options, auth, environment, commands: [...] }
 ```
 
 Every node carries `name`, `description`, `usage`, `options[{flags, description}]` and child
-`commands`; the root adds the installed `version`. See
+`commands`; the root adds the installed `version`, `auth` (how to get a key and log in —
+`auth.login.nonInteractive` is the form for a run without a terminal, §2) and `environment`
+(the variables the CLI reads, §10). See
 [Machine-readable help](./reference.md#machine-readable-help).
 
 ## 2. Authenticate without prompts
@@ -47,6 +49,9 @@ on stdout before sending the key.
 `SYNCHAIN_TOKEN` is read by `login` **only** — every other command uses the key `login` stored,
 so setting the variable without running `login` does nothing (`doctor` warns about exactly
 that).
+
+The CLI states all of this itself: `synchain --help` prints it as its `Authentication:` block, and
+`synchain --help --format json | jq .auth` returns it as data.
 
 `login` validates the key against `GET /api/user/me` and persists it to the OS config dir
 (`%APPDATA%\synchain\config.json` on Windows, `~/.config/synchain/config.json` mode
@@ -268,6 +273,7 @@ Rule of thumb: branch on the exit code, read `error.code` for the specific reaso
 | ----------------- | --------------------------------------------------- |
 | `SYNCHAIN_TOKEN`  | CLI key for non-interactive `login` (never argv). Read by `login` only. |
 | `SYNCHAIN_ERROR_FORMAT` | `json` / `text`: the error format, instead of letting the terminal decide. |
+| `XDG_CONFIG_HOME` / `APPDATA` | Config directory: `$XDG_CONFIG_HOME/synchain` on POSIX (default `~/.config/synchain`), `%APPDATA%\synchain` on Windows. |
 | `--base-url <url>`| `login` option: target deployment (default `https://www.synchain.ca`); persisted after login. |
 | `--format json`   | The one global option — any command, any position: JSON stdout, JSON errors, JSON `--help`. |
 | `--project <id>`  | Override the active project for one command (full UUID only). |

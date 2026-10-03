@@ -4,6 +4,29 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+- `synchain --help` now says how to authenticate, so neither a person nor an agent needs a second
+  command to find out how to log in. After the command list come three blocks:
+  - **Authentication**: requests carry a CLI key (`synch_live_sk_…`) as `Authorization: Bearer`;
+    generate one at `https://www.synchain.ca/settings` under Settings → CLI Access (it is shown
+    once); `synchain login` on a terminal, `SYNCHAIN_TOKEN=synch_live_sk_… synchain login`
+    without one; only `login` takes the key from `SYNCHAIN_TOKEN`; check with `synchain doctor`
+    (offline) and `synchain whoami`.
+  - **Environment**: `SYNCHAIN_TOKEN`, `SYNCHAIN_ERROR_FORMAT`, `XDG_CONFIG_HOME`, `APPDATA`.
+  - **Examples**, with a pointer to `synchain help safety`.
+- `synchain --help --format json` carries the same at the root of the command tree: `auth`
+  (`scheme`, `credential`, `env`, `envReadBy`, `login`, `obtain`, `verify`) and `environment`
+  (`[{ name, description }]`), placed before `commands`. Subcommand nodes are unchanged.
+- The exported `CommandTree` type declares the two new root fields (`auth`, `environment`) as
+  required. No new type names are exported.
+
+### Changed
+- README: the quick start is now a single Quickstart sequence that runs from
+  `npm install -g @synchain/cli` through `login`, `whoami` and `project use` to a first upload, in
+  both the English and the Chinese half.
+
 ## 0.9.0 - 2026-10-01
 
 ### Restored
