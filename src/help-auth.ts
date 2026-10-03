@@ -15,7 +15,10 @@
 import { DEFAULT_BASE_URL } from "./config.js";
 import type { CommandTree } from "./help-json.js";
 
-/** Env var used by CI / agents to pass a CLI key without an argv flag. Read by `login` only. */
+/**
+ * Env var used by CI / agents to pass a CLI key without an argv flag. Only `login` takes the key
+ * from it; `doctor` reads it too, but only to warn when it differs from the stored key.
+ */
 export const TOKEN_ENV_VAR = "SYNCHAIN_TOKEN";
 
 /**
@@ -52,8 +55,8 @@ export const ENVIRONMENT_HELP: CommandTree["environment"] = [
   {
     name: TOKEN_ENV_VAR,
     description:
-      "CLI key for a non-interactive login. Read by synchain login only; every other command " +
-      "uses the stored key.",
+      "CLI key for a non-interactive login. Only synchain login takes the key from it; every " +
+      "other command uses the stored key.",
   },
   {
     name: "SYNCHAIN_ERROR_FORMAT",
@@ -126,7 +129,8 @@ function columns(rows: ReadonlyArray<readonly [string, string]>): string[] {
 export const AUTH_HELP_TEXT = [
   "Authentication:",
   `  Requests carry a ${AUTH_HELP.credential} as Authorization: ${AUTH_HELP.scheme} <key>.`,
-  `  Get a key at ${AUTH_HELP.obtain.url}`,
+  // Static help cannot know a `login --base-url` deployment, so the URL says whose page it is.
+  `  Get a key at ${AUTH_HELP.obtain.url} (default host)`,
   `  ${AUTH_HELP.obtain.steps}`,
   "",
   "  On a terminal (prompts for the key, input hidden):",
@@ -134,8 +138,9 @@ export const AUTH_HELP_TEXT = [
   "  Without a terminal (CI, agents; never prompts):",
   `    ${AUTH_HELP.login.nonInteractive}`,
   "",
-  `  Only ${AUTH_HELP.envReadBy.map((command) => `synchain ${command}`).join(", ")} reads ` +
-    `${AUTH_HELP.env}; other commands use the stored key.`,
+  `  Only ${AUTH_HELP.envReadBy.map((command) => `synchain ${command}`).join(", ")} takes the ` +
+    `key from ${AUTH_HELP.env};`,
+  "  every other command uses the stored key.",
   `  Check: ${AUTH_HELP.verify.offline} (offline), then ${AUTH_HELP.verify.online} ` +
     "(asks the server).",
   "",

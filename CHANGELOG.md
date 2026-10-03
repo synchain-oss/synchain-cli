@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - **Authentication**: requests carry a CLI key (`synch_live_sk_…`) as `Authorization: Bearer`;
     generate one at `https://www.synchain.ca/settings` under Settings → CLI Access (it is shown
     once); `synchain login` on a terminal, `SYNCHAIN_TOKEN=synch_live_sk_… synchain login`
-    without one; only `login` reads `SYNCHAIN_TOKEN`; check with `synchain doctor` (offline)
-    and `synchain whoami`.
+    without one; only `login` takes the key from `SYNCHAIN_TOKEN`; check with `synchain doctor`
+    (offline) and `synchain whoami`.
   - **Environment**: `SYNCHAIN_TOKEN`, `SYNCHAIN_ERROR_FORMAT`, `XDG_CONFIG_HOME`, `APPDATA`.
   - **Examples**, with a pointer to `synchain help safety`.
 - `synchain --help --format json` carries the same at the root of the command tree: `auth`

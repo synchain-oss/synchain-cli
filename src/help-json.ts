@@ -49,11 +49,14 @@ export interface CommandTree extends CommandTreeNode {
     credential: string;
     /** The environment variable a non-interactive login reads the key from. */
     env: string;
-    /** The commands that read `env`; every other command uses the stored key. */
+    /**
+     * The commands that take the key from `env`; every other command uses the stored key.
+     * (`doctor` looks at `env` too, only to warn when it holds a different key.)
+     */
     envReadBy: string[];
     /** Command lines that log in: on a terminal (prompts), and without one (no prompt). */
     login: { interactive: string; nonInteractive: string };
-    /** Where a key is generated, and the steps there. */
+    /** Where a key is generated (the default host's settings page), and the steps there. */
     obtain: { url: string; steps: string };
     /** Command lines that check the setup: offline (sends nothing), and against the server. */
     verify: { offline: string; online: string };

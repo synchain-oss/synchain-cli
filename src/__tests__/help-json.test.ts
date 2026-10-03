@@ -100,23 +100,33 @@ function sourceFiles(dir: string): string[] {
 }
 
 /**
- * Every environment variable the source reads: `env.NAME` (on `process.env` or an injected `env`
- * object) and `env[TOKEN_ENV_VAR]`. help-auth.ts itself is left out -- it is the list being
- * checked, not a reader.
+ * The environment variables one source text reads, on `process.env` or an injected `env` object:
+ * `env.NAME` / `env?.NAME`, and `env[...]` / `env?.[...]` whose key is a quoted name or a known
+ * constant. Any other key (computed, a template with a placeholder) throws: the list could not be
+ * checked against it, so the read has to be rewritten into one of the forms above.
+ */
+function envNamesIn(text: string, where: string): string[] {
+  const constants: Record<string, string> = { TOKEN_ENV_VAR };
+  const reads = text.matchAll(/\benv(?:\??\.([A-Z][A-Z0-9_]*)|(?:\?\.)?\[([^\]]*)\])/g);
+  return [...reads].map((m) => {
+    if (m[1]) return m[1];
+    const key = m[2]!.trim();
+    const quoted = /^(["'`])([A-Z][A-Z0-9_]*)\1$/.exec(key);
+    if (quoted) return quoted[2]!;
+    const resolved = constants[key];
+    if (resolved === undefined) throw new Error(`env[${key}] in ${where}: unknown key`);
+    return resolved;
+  });
+}
+
+/**
+ * Every environment variable the source reads (see `envNamesIn`). help-auth.ts itself is left
+ * out -- it is the list being checked, not a reader.
  */
 function envReadBySource(): string[] {
-  const constants: Record<string, string> = { TOKEN_ENV_VAR };
   const names = sourceFiles(SRC)
     .filter((file) => path.basename(file) !== "help-auth.ts")
-    .flatMap((file) => {
-      const text = readFileSync(file, "utf8");
-      return [...text.matchAll(/\benv(?:\.([A-Z][A-Z0-9_]*)|\[([A-Za-z_]+)\])/g)].map((m) => {
-        if (m[1]) return m[1];
-        const resolved = constants[m[2]!];
-        expect(resolved, `env[${m[2]}] in ${path.basename(file)}: unknown constant`).toBeDefined();
-        return resolved!;
-      });
-    });
+    .flatMap((file) => envNamesIn(readFileSync(file, "utf8"), path.basename(file)));
   return [...new Set(names)].sort();
 }
 
@@ -325,6 +335,43 @@ describe("`--help --format json`: how to authenticate", () => {
       expect.arrayContaining(["APPDATA", "SYNCHAIN_ERROR_FORMAT", "SYNCHAIN_TOKEN", "XDG_CONFIG_HOME"])
     );
     expect(ENVIRONMENT_HELP.map((entry) => entry.name).sort()).toEqual(read);
+  });
+
+  it("the source scan sees every naming form and rejects keys it cannot resolve", () => {
+    const sample = [
+      "process.env.PLAIN",
+      "input.env?.OPTIONAL",
+      'process.env["DOUBLE"]',
+      "env['SINGLE']",
+      "env?.[`BACKTICK`]",
+      "process.env[TOKEN_ENV_VAR]",
+    ].join("\n");
+    expect(envNamesIn(sample, "sample")).toEqual([
+      "PLAIN",
+      "OPTIONAL",
+      "DOUBLE",
+      "SINGLE",
+      "BACKTICK",
+      "SYNCHAIN_TOKEN",
+    ]);
+    expect(() => envNamesIn("process.env[name]", "sample")).toThrow(/unknown key/);
+    expect(() => envNamesIn("env[`${prefix}_TOKEN`]", "sample")).toThrow(/unknown key/);
+  });
+
+  it("reads process.env by name only, or hands it on whole as an object called `env`", () => {
+    // Anything else -- `const { X } = process.env`, `const e = process.env; e.X` -- would read a
+    // variable without the scan above seeing it.
+    const handedOnAsEnv = /\benv(?::[^=,()]*)?\s*[:=]\s*$/;
+    const stray = sourceFiles(SRC).flatMap((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .flatMap((line, i) =>
+          [...line.matchAll(/\bprocess\.env\b(?!\s*(?:\??\.|\[))/g)]
+            .filter((m) => !handedOnAsEnv.test(line.slice(0, m.index)))
+            .map(() => `${path.basename(file)}:${i + 1}: ${line.trim()}`)
+        )
+    );
+    expect(stray).toEqual([]);
   });
 
   it("never prints anything shaped like a real key, in either format", async () => {
