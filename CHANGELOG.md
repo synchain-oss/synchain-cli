@@ -4,7 +4,7 @@ All notable changes to `@synchain/cli` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.10.0 - 2026-10-03
 
 ### Added
 - `synchain --help` now says how to authenticate, so neither a person nor an agent needs a second
