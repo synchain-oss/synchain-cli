@@ -71,6 +71,23 @@
   - `src/__tests__/default-base-url.test.ts`:`help-auth.ts` 加入「面向用户、不得写死主机名」的
     文件清单。
 
+### 4. PR #54 审查后的补充
+
+- **`src/help-auth.ts`**:`auth.login` 增加 `nonInteractivePowerShell`
+  (`$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login`)。`nonInteractive` 的
+  `NAME=value command` 是 POSIX shell 写法,PowerShell 不认。文本 help 把两行并列,
+  行尾用 `#` 注释标明 shell(两种 shell 里都是注释,照抄整行仍可运行)。「Without a terminal」
+  一句写明 CI 里从 secret 注入 `SYNCHAIN_TOKEN`,不要在 shell 里手敲 key(会留在 history 里)。
+  占位符常量 `KEY_PLACEHOLDER` 改为导出。
+- **`src/commands/help.ts`**:`synchain help login` 的免交互示例改为读取 `help-auth.ts` 的同一组
+  命令行,占位符统一为 Unicode 省略号 `synch_live_sk_…`(原为 ASCII `...`)。
+- **`docs/reference.md`**(冻结面):§Non-interactive 补 PowerShell 写法与「CI 从 secret 注入」;
+  §Machine-readable help 的 `login` 一项补 `nonInteractivePowerShell`。
+- **`docs/install-for-agents.md`**、**`README.md`**(两半)、**`CHANGELOG.md`**:同步上述内容。
+- **测试**:`help-json.test.ts` 断言两种写法都在 JSON 与文本 help 里、命令都指向 `login`;
+  `login.test.ts` 断言 `help login` 与 `--help` 的命令行和占位符一致;`docs-consistency.test.ts`
+  断言 README 两半都给出两种写法(字段名出现在 reference 正文由已有用例覆盖)。
+
 ## HTTP API 契约影响
 
 **contract-impact: none。**

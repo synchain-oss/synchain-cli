@@ -34,8 +34,10 @@ synchain files upload ./mix.wav      # upload a file to it
 ```
 
 Without a terminal (CI, an AI agent), log in with the key in the environment instead —
-`SYNCHAIN_TOKEN=synch_live_sk_… synchain login` — and run the rest unchanged. `synchain --help`
-shows the same steps.
+`SYNCHAIN_TOKEN=synch_live_sk_… synchain login`, or in PowerShell
+`$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login` — and run the rest unchanged. In CI,
+set `SYNCHAIN_TOKEN` from a secret rather than typing the key: a shell keeps what you type in its
+history. `synchain --help` shows the same steps.
 
 ## Commands at a glance
 
@@ -127,7 +129,7 @@ synchain project use <id>            # 设为当前项目(id,或 ls 输出的 re
 synchain files upload ./mix.wav      # 上传文件到该项目
 ```
 
-没有终端时(CI、AI agent),改用环境变量登录:`SYNCHAIN_TOKEN=synch_live_sk_… synchain login`,其余步骤不变。`synchain --help` 也会列出这些步骤。
+没有终端时(CI、AI agent),改用环境变量登录:`SYNCHAIN_TOKEN=synch_live_sk_… synchain login`,PowerShell 里写作 `$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login`,其余步骤不变。CI 里请从 secret 注入 `SYNCHAIN_TOKEN`,不要在 shell 里手敲 key:shell 会把敲过的内容留在历史记录里。`synchain --help` 也会列出这些步骤。
 
 ## 命令总览
 

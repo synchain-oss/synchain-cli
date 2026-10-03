@@ -79,6 +79,15 @@ key comes from `SYNCHAIN_TOKEN`:
 SYNCHAIN_TOKEN=synch_live_sk_… synchain login
 ```
 
+That is POSIX shell syntax; PowerShell has no `NAME=value command` form and needs:
+
+```powershell
+$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login
+```
+
+In CI, set `SYNCHAIN_TOKEN` from the CI system's secrets rather than writing the key into the
+command: a shell keeps what is typed in its history.
+
 The base URL is `--base-url` when given, else the one already stored, else the default
 `https://www.synchain.ca`. When it reuses a stored base URL other than the default, `login`
 says so on stdout before sending the key (`Using stored base URL … (pass --base-url to
@@ -417,7 +426,8 @@ in before any of them fails with `401`:
   the stored key; `synchain doctor` looks at `env` too, but only to check it against the stored
   key (its `credential` check, see [`synchain doctor`](#synchain-doctor)).
 - `login` — `interactive` is the command on a terminal (it prompts, input hidden);
-  `nonInteractive` is the same with the key in `env`, for CI and agents.
+  `nonInteractive` is the same with the key in `env`, for CI and agents, in POSIX shell syntax;
+  `nonInteractivePowerShell` is that line for PowerShell.
 - `obtain` — `url` is the settings page of the default host, and `steps` says where on it a key
   is generated (it is shown once).
 - `verify` — `offline` is `synchain doctor` (sends nothing); `online` is `synchain whoami`

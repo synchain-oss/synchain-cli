@@ -25,7 +25,8 @@ synchain --help --format json      # { name, version, description, usage, option
 
 Every node carries `name`, `description`, `usage`, `options[{flags, description}]` and child
 `commands`; the root adds the installed `version`, `auth` (how to get a key and log in —
-`auth.login.nonInteractive` is the form for a run without a terminal, §2) and `environment`
+`auth.login.nonInteractive` is the form for a run without a terminal, §2, and
+`auth.login.nonInteractivePowerShell` the same in PowerShell) and `environment`
 (the variables the CLI reads, §10). See
 [Machine-readable help](./reference.md#machine-readable-help).
 
@@ -39,6 +40,10 @@ export SYNCHAIN_TOKEN=synch_live_sk_…
 synchain login
 synchain doctor --json             # offline: confirms a key is stored, masked, no request
 ```
+
+In PowerShell the first line is `$env:SYNCHAIN_TOKEN = "synch_live_sk_…"`. In CI, set the
+variable from the CI system's secrets rather than typing the key: a shell keeps what is typed
+in its history.
 
 When stdin is not a terminal — the normal case for an agent — `login` never prompts. The key
 comes from `SYNCHAIN_TOKEN`; the base URL from `--base-url`, else the one already stored, else

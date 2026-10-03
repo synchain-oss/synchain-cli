@@ -54,8 +54,11 @@ export interface CommandTree extends CommandTreeNode {
      * (`doctor` looks at `env` too, but only to check it against the stored key.)
      */
     envReadBy: string[];
-    /** Command lines that log in: on a terminal (prompts), and without one (no prompt). */
-    login: { interactive: string; nonInteractive: string };
+    /**
+     * Command lines that log in: on a terminal (prompts), and without one (no prompt) -- in
+     * POSIX shell syntax, and the same for PowerShell.
+     */
+    login: { interactive: string; nonInteractive: string; nonInteractivePowerShell: string };
     /** Where a key is generated (the default host's settings page), and the steps there. */
     obtain: { url: string; steps: string };
     /** Command lines that check the setup: offline (sends nothing), and against the server. */

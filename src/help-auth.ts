@@ -24,8 +24,9 @@ export const TOKEN_ENV_VAR = "SYNCHAIN_TOKEN";
 /**
  * The key's shape with the secret part elided. Never a full-length key, not even a fake one:
  * secret scanning rejects the full form, and this elided form is the documented placeholder.
+ * Every help text that shows a key uses it, so the placeholder is spelled one way everywhere.
  */
-const KEY_PLACEHOLDER = "synch_live_sk_…";
+export const KEY_PLACEHOLDER = "synch_live_sk_…";
 
 /** The root's `auth` in `--help --format json`; the text help's "Authentication:" block. */
 export const AUTH_HELP: CommandTree["auth"] = {
@@ -35,7 +36,10 @@ export const AUTH_HELP: CommandTree["auth"] = {
   envReadBy: ["login"],
   login: {
     interactive: "synchain login",
+    // POSIX shells (sh, bash, zsh): the variable is set for this one command only.
     nonInteractive: `${TOKEN_ENV_VAR}=${KEY_PLACEHOLDER} synchain login`,
+    // PowerShell has no `NAME=value command` form: the line above is a syntax error there.
+    nonInteractivePowerShell: `$env:${TOKEN_ENV_VAR} = "${KEY_PLACEHOLDER}"; synchain login`,
   },
   obtain: {
     url: `${DEFAULT_BASE_URL}/settings`,
@@ -122,6 +126,20 @@ function columns(rows: ReadonlyArray<readonly [string, string]>): string[] {
 }
 
 /**
+ * The two non-interactive login lines (POSIX shells, then PowerShell), each followed by a note.
+ * The note is a `#` comment in both shells, so a copied line still runs. `synchain help login`
+ * prints them too, so both helps show the same command and the same key placeholder.
+ */
+export function nonInteractiveLoginLines(
+  indent: string,
+  notes: readonly [posix: string, powerShell: string] = ["POSIX shells", "PowerShell"]
+): string[] {
+  const lines = [AUTH_HELP.login.nonInteractive, AUTH_HELP.login.nonInteractivePowerShell];
+  const width = Math.max(...lines.map((line) => line.length));
+  return lines.map((line, i) => `${indent}${line.padEnd(width)}  # ${notes[i]}`);
+}
+
+/**
  * The "Authentication:", "Environment:" and "Examples:" blocks of the text `synchain --help`,
  * each followed by a blank line. Built from `AUTH_HELP` / `ENVIRONMENT_HELP`, so the text and the
  * JSON cannot say different things.
@@ -135,8 +153,12 @@ export const AUTH_HELP_TEXT = [
   "",
   "  On a terminal (prompts for the key, input hidden):",
   `    ${AUTH_HELP.login.interactive}`,
-  "  Without a terminal (CI, agents; never prompts):",
-  `    ${AUTH_HELP.login.nonInteractive}`,
+  ...wrap(
+    `Without a terminal (CI, agents; never prompts), the key in ${AUTH_HELP.env}, set ` +
+      "from a CI secret (a key typed into a shell stays in its history):",
+    HELP_TEXT_WIDTH - 2
+  ).map((line) => `  ${line}`),
+  ...nonInteractiveLoginLines("    "),
   "",
   `  Only ${AUTH_HELP.envReadBy.map((command) => `synchain ${command}`).join(", ")} takes the ` +
     `key from ${AUTH_HELP.env};`,

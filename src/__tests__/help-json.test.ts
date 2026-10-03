@@ -13,6 +13,7 @@ import {
   AUTH_HELP_TEXT,
   ENVIRONMENT_HELP,
   HELP_TEXT_WIDTH,
+  KEY_PLACEHOLDER,
   TOKEN_ENV_VAR,
 } from "../help-auth.js";
 import {
@@ -130,9 +131,12 @@ function envReadBySource(): string[] {
   return [...new Set(names)].sort();
 }
 
-/** The command a help line runs: `SYNCHAIN_TOKEN=… synchain login` -> `login`. */
+/**
+ * The command a help line runs: `SYNCHAIN_TOKEN=… synchain login` (POSIX shells) and
+ * `$env:SYNCHAIN_TOKEN = "…"; synchain login` (PowerShell) -> `login`.
+ */
 function commandOf(line: string): string {
-  const m = /^(?:[A-Z_]+=\S+ )?synchain ([a-z]+)\b/.exec(line);
+  const m = /^(?:[A-Z_]+=\S+ |\$env:[A-Z_]+ = "[^"]*"; )?synchain ([a-z]+)\b/.exec(line);
   expect(m, `not a synchain command line: ${line}`).not.toBeNull();
   return m![1]!;
 }
@@ -302,6 +306,7 @@ describe("`--help --format json`: how to authenticate", () => {
     expect(tree.auth.login).toEqual({
       interactive: "synchain login",
       nonInteractive: "SYNCHAIN_TOKEN=synch_live_sk_… synchain login",
+      nonInteractivePowerShell: '$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login',
     });
     expect(tree.auth.obtain.url).toBe(`${DEFAULT_BASE_URL}/settings`);
     expect(tree.auth.obtain.steps).toContain("Settings → CLI Access → Generate");
@@ -320,12 +325,28 @@ describe("`--help --format json`: how to authenticate", () => {
     const tree = JSON.parse((await run(["--help", "--format", "json"])).out) as CommandTree;
     const topLevel = tree.commands.map((cmd) => cmd.name);
     const { login, verify, envReadBy } = tree.auth;
-    for (const line of [login.interactive, login.nonInteractive, verify.offline, verify.online]) {
-      expect(topLevel).toContain(commandOf(line));
-    }
+    const lines = [
+      login.interactive,
+      login.nonInteractive,
+      login.nonInteractivePowerShell,
+      verify.offline,
+      verify.online,
+    ];
+    for (const line of lines) expect(topLevel).toContain(commandOf(line));
     for (const command of envReadBy) expect(topLevel).toContain(command);
     expect(commandOf(login.nonInteractive)).toBe("login");
     expect(login.nonInteractive.startsWith(`${tree.auth.env}=`)).toBe(true);
+    expect(commandOf(login.nonInteractivePowerShell)).toBe("login");
+    expect(login.nonInteractivePowerShell.startsWith(`$env:${tree.auth.env} = `)).toBe(true);
+  });
+
+  it("gives the non-interactive login for both shells, with the same key placeholder", async () => {
+    // `NAME=value command` is POSIX-only: PowerShell rejects it, so Windows needs its own line.
+    const { login } = (JSON.parse((await run(["--help", "--format", "json"])).out) as CommandTree)
+      .auth;
+    expect(login.nonInteractive).toContain(KEY_PLACEHOLDER);
+    expect(login.nonInteractivePowerShell).toContain(`"${KEY_PLACEHOLDER}"`);
+    expect(login.nonInteractive).not.toContain("$env:");
   });
 
   it("lists exactly the environment variables the source reads", () => {
@@ -402,6 +423,8 @@ describe("text `--help`", () => {
     expect(out).toContain(`${DEFAULT_BASE_URL}/settings`);
     expect(out).toContain("Examples:");
     expect(out).toContain("synchain help safety");
+    // The key is injected from a CI secret, not typed where shell history keeps it.
+    expect(out.replace(/\s+/g, " ")).toContain(`the key in ${TOKEN_ENV_VAR}, set from a CI secret`);
     // After commander's lists, before the documentation links.
     const at = (text: string): number => out.indexOf(text);
     expect(at("Commands:")).toBeLessThan(at("Authentication:"));
@@ -416,6 +439,7 @@ describe("text `--help`", () => {
       AUTH_HELP.credential,
       AUTH_HELP.login.interactive,
       AUTH_HELP.login.nonInteractive,
+      AUTH_HELP.login.nonInteractivePowerShell,
       AUTH_HELP.obtain.url,
       AUTH_HELP.obtain.steps,
       AUTH_HELP.verify.offline,

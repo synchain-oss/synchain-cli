@@ -12,13 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - **Authentication**: requests carry a CLI key (`synch_live_sk_…`) as `Authorization: Bearer`;
     generate one at `https://www.synchain.ca/settings` under Settings → CLI Access (it is shown
     once); `synchain login` on a terminal, `SYNCHAIN_TOKEN=synch_live_sk_… synchain login`
-    without one; only `login` takes the key from `SYNCHAIN_TOKEN`; check with `synchain doctor`
-    (offline) and `synchain whoami`.
+    without one (in PowerShell `$env:SYNCHAIN_TOKEN = "synch_live_sk_…"; synchain login`; in
+    CI the variable comes from a secret, not a typed key); only `login` takes the key from
+    `SYNCHAIN_TOKEN`; check with `synchain doctor` (offline) and `synchain whoami`.
   - **Environment**: `SYNCHAIN_TOKEN`, `SYNCHAIN_ERROR_FORMAT`, `XDG_CONFIG_HOME`, `APPDATA`.
   - **Examples**, with a pointer to `synchain help safety`.
 - `synchain --help --format json` carries the same at the root of the command tree: `auth`
   (`scheme`, `credential`, `env`, `envReadBy`, `login`, `obtain`, `verify`) and `environment`
   (`[{ name, description }]`), placed before `commands`. Subcommand nodes are unchanged.
+  `auth.login` has the non-interactive line for POSIX shells (`nonInteractive`) and for
+  PowerShell (`nonInteractivePowerShell`).
 - The exported `CommandTree` type declares the two new root fields (`auth`, `environment`) as
   required. No new type names are exported.
 
@@ -26,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - README: the quick start is now a single Quickstart sequence that runs from
   `npm install -g @synchain/cli` through `login`, `whoami` and `project use` to a first upload, in
   both the English and the Chinese half.
+- `synchain help login` shows the same two non-interactive lines as `synchain --help`, so the key
+  placeholder is written `synch_live_sk_…` in both (it was `synch_live_sk_...` in `help login`).
 
 ## 0.9.0 - 2026-10-01
 

@@ -711,9 +711,11 @@ describe("README.md", () => {
     expect(en).toContain(TREE.auth.verify.online);
     expect(en[en.length - 1]).toMatch(/^synchain files upload /);
     expect(zh).toEqual(en);
-    // The non-interactive login is shown too, in both halves.
-    expect(english).toContain(TREE.auth.login.nonInteractive);
-    expect(chinese).toContain(TREE.auth.login.nonInteractive);
+    // The non-interactive login is shown too, in both halves, for POSIX shells and PowerShell.
+    for (const line of [TREE.auth.login.nonInteractive, TREE.auth.login.nonInteractivePowerShell]) {
+      expect(english).toContain(line);
+      expect(chinese).toContain(line);
+    }
   });
 });
 
