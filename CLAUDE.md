@@ -35,7 +35,9 @@
 
 ## 1. 分支模型与工作流程
 
-- dev 为默认主干(无 stage/prod)。主支线 = `feature/extraction`;子支线 = `feat/<TASK-ID>-<slug>`。
+- dev 为默认主干。主支线 = `feature/extraction`;子支线 = `feat/<TASK-ID>-<slug>`。
+- prod = 最新已发布的版本(含 rc / beta),只收本仓 `dev` 的 PR(merge commit);发版 tag 只打在 prod 的合并提交上,
+  npm 从该提交发布。不设 stage。流程见 [docs/RELEASING.md](./docs/RELEASING.md)。
 - same-repo PR:仅接受 `feat/*` | `feature/*` 来源;另放行 `dependabot/*`。
 - fork PR:免除 `feat/*` 命名规则,但 head 分支名不得为 `dev`/`stage`/`prod`/`feature/v1`/`feature/extraction`;只跑无 secrets 的构建/测试,review bot 不自动跑,维护者手工加 `external` label。
 - branch-gate(required context)还承担 DCO(Signed-off-by)与冻结契约 path guard 两条断言。
@@ -65,7 +67,7 @@ npm audit --audit-level=high
 | workflow | runner | 触发 | 说明 |
 | --- | --- | --- | --- |
 | `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
-| `branch-gate` | `ubuntu-latest` | PR → dev | 分支命名 + DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
+| `branch-gate` | `ubuntu-latest` | PR → dev、prod | 分支命名(base = prod 只放行本仓 dev)+ DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
 | `claude-review` / `deepseek-review` | `ubuntu-latest` | same-repo PR | 二选一 enable;fork PR 不跑 |
 | `pr-agent` | `ubuntu-latest` | same-repo PR | docker action,必须 latest;fork PR 不跑 |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
@@ -83,7 +85,7 @@ CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTT
 | 运行时 | Node ≥ 20、npm |
 | 本地 gates | npm ci / typecheck / test --coverage / build / pack --dry-run / audit(§2) |
 | 合规扫描 | 工作树:`gitleaks detect --no-git --redact --config .gitleaks.toml`;git 历史(HEAD 可达祖先):同命令去掉 `--no-git`(需完整 clone)。版本钉 .gitleaks-version。另 `pipx run reuse lint`。三条都不进 npm run gates 字符串 |
-| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot)。发布目前由维护者本地手工执行,不经 CI(仓内无 publish workflow) |
+| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot)。发布目前由维护者本地手工执行,不经 CI(仓内无 publish workflow);`npm publish` 先跑 `prepublishOnly`(`scripts/prepublish-check.mjs`),流程见 docs/RELEASING.md |
 | 为什么强调本地 | 子 PR 不触发完整 CI;npm audit 与覆盖率阈值是 CI 硬门禁,本地先过 |
 
 ## 7. 安全铁律

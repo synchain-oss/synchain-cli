@@ -3,6 +3,12 @@
 几条只对本仓维护者有意义的口径。外部贡献者不必读这一篇 —— 你需要的都在
 [CONTRIBUTING.md](../CONTRIBUTING.md) 与 [CLAUDE.md](../CLAUDE.md) 里。
 
+## 发版
+
+完整手册见 [RELEASING.md](./RELEASING.md):`dev` → `prod`(PR,merge commit)→ 在 `prod` 的合并提交上打 tag →
+`npm publish`(`prepublishOnly` 守卫)→ GitHub Release → purge jsDelivr → 五处回读;另含预发布、回滚、补建 Release
+与历史缺口。`docs/reference.md` 的「Publishing (maintainers)」一节是冻结契约的一部分,只写了最简命令,以 RELEASING.md 为准。
+
 ## 内部规划编号
 
 本仓的 workflow 注释、配置文件与变更文档里曾散布一批形如 `J20` / `C10` / `ADR-013` /
