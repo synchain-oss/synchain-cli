@@ -54,7 +54,7 @@ npm audit --audit-level=high
 
 ## 9. 发布流程(仅维护者)
 
-见 `docs/reference.md` 的「Publishing (maintainers)」一节;版本号在 `package.json`。
+见 [docs/RELEASING.md](./docs/RELEASING.md)(`docs/reference.md` 的「Publishing (maintainers)」一节只有最简命令);版本号在 `package.json`。
 
 ## 10. 仓库设置(仅维护者)
 
