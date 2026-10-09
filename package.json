@@ -48,7 +48,8 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gates": "npm run typecheck && npm run test -- --coverage && npm run build && npm pack --dry-run && npm audit --audit-level=high"
+    "gates": "npm run typecheck && npm run test -- --coverage && npm run build && npm pack --dry-run && npm audit --audit-level=high",
+    "prepublishOnly": "node scripts/prepublish-check.mjs"
   },
   "engines": {
     "node": ">=20"

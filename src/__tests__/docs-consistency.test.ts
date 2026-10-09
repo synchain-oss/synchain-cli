@@ -743,6 +743,34 @@ describe("CHANGELOG.md, 0.9.0", () => {
   });
 });
 
+/**
+ * The newest release section of the CHANGELOG is the version package.json declares. While work
+ * is under way an `Unreleased` section sits on top and package.json still names the last release;
+ * the release PR turns `Unreleased` into `X.Y.Z - YYYY-MM-DD` and bumps package.json in the same
+ * commit. A version bumped without the CHANGELOG cut, or the reverse, fails here -- long before
+ * scripts/prepublish-check.mjs would stop `npm publish` on it.
+ */
+describe("CHANGELOG.md, newest release", () => {
+  const VERSIONED =
+    /^\[?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\]?(?:\s+-\s+\d{4}-\d{2}-\d{2})?$/;
+  const UNRELEASED = /^\[?Unreleased\]?$/i;
+
+  it("is the version package.json declares (an Unreleased section may sit above it)", () => {
+    const headings: string[] = [];
+    let inFence = false;
+    for (const line of read("CHANGELOG.md").split(/\r?\n/)) {
+      if (line.trimStart().startsWith("```")) inFence = !inFence;
+      const m = /^##\s+(.*?)\s*$/.exec(line);
+      if (!inFence && m) headings.push(m[1]!);
+    }
+    const newest = headings.findIndex((h) => VERSIONED.test(h));
+    expect(newest, "CHANGELOG.md has no `## X.Y.Z - YYYY-MM-DD` heading").toBeGreaterThanOrEqual(0);
+    expect(headings.slice(0, newest).filter((h) => !UNRELEASED.test(h))).toEqual([]);
+    const pkg = JSON.parse(read("package.json")) as { version: string };
+    expect(VERSIONED.exec(headings[newest]!)![1]).toBe(pkg.version);
+  });
+});
+
 describe("non-interactive `files rm`", () => {
   it.each([REFERENCE, AGENTS])("%s no longer documents the old exit-0 gap", (rel) => {
     // It was documented as a known gap that a later release might close; this one does.
