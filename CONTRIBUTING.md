@@ -25,7 +25,7 @@ issue/PR 接受中文或英文;维护者内部沟通用中文。
 
 ## 5. 环境搭建
 
-Node.js ≥ 20。`npm ci` 安装依赖,`npm run build` 产出 `dist/`,`npm link` 暴露全局 `synchain` 命令。
+运行 CLI 需要 Node.js ≥ 20;本地开发与测试(vitest 4 / vite 8)需要 Node.js ^20.19.0 或 ≥ 22.12.0,更早的 20.x / 22.x 上 `npm ci` 会报 EBADENGINE,测试可能跑不起来。`npm ci` 安装依赖,`npm run build` 产出 `dist/`,`npm link` 暴露全局 `synchain` 命令。
 
 ## 6. 提 PR 前的本地 gates
 
