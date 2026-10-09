@@ -751,8 +751,10 @@ describe("CHANGELOG.md, 0.9.0", () => {
  * scripts/prepublish-check.mjs would stop `npm publish` on it.
  */
 describe("CHANGELOG.md, newest release", () => {
+  // The date is required, as scripts/prepublish-check.mjs requires it: a `## 0.11.0` without one
+  // is not taken as the newest release, so it stands above it as a non-Unreleased heading and fails.
   const VERSIONED =
-    /^\[?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\]?(?:\s+-\s+\d{4}-\d{2}-\d{2})?$/;
+    /^\[?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\]?\s+-\s+\d{4}-\d{2}-\d{2}$/;
   const UNRELEASED = /^\[?Unreleased\]?$/i;
 
   it("is the version package.json declares (an Unreleased section may sit above it)", () => {

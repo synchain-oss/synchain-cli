@@ -42,7 +42,10 @@ npm version "$V" --no-git-tag-version
 - **CHANGELOG**:把顶部的 `## Unreleased` 改成 `## X.Y.Z - YYYY-MM-DD`,内容不动。日期写计划 npm 发布那天的 **UTC** 日期。
 - `git diff --stat` 只应有 `CHANGELOG.md`、`package.json`、`package-lock.json` 三个文件。
 - 本地 `npm ci && npm run gates && node dist/index.js --version`,最后一行输出 `X.Y.Z`。`src/__tests__/docs-consistency.test.ts`
-  会检查「CHANGELOG 第一个带版本号的标题 == `package.json` 的 version」,只改了一边就红。
+  会检查「CHANGELOG 第一个带版本号的标题 == `package.json` 的 version」,只改了一边、或标题漏了日期就红。
+- **`npm audit --audit-level=high` 是发版前置条件**,它在 `npm run gates` 里,也是 CI `cli-gate` 的一项,覆盖全部依赖(含 dev 依赖)。
+  新的 advisory 随时会出:动手前先看 `dev` 上它还绿不绿;红了就先开一个修依赖的 PR 进 `dev`,再切版本。不要为了发版改用
+  `--omit=dev` 或跳过 gates。
 - README 中英两半的标题骨架:`(cd scripts && pwsh -NoProfile -File check-readme-parity.ps1 -SingleFile ../README.md)`(CI 不跑它)。
 - `git commit -s -a -m "chore(release): $V"`,开 PR → `dev`,标题 `chore(release): X.Y.Z`。必需检查 `cli-gate`、`branch-gate`
   全绿、评论全部解决后 squash 合并;squash 提交的正文保留 `Signed-off-by:`。
@@ -64,7 +67,8 @@ gh pr create -R "$REPO" --base prod --head dev --title "release: v$V" --body "<�
   `cli-gate` 就是放行依据。
 - **DCO** 照常检查这个 PR 的每一个提交,即 `dev` 上自上次晋升以来的全部提交,**merge commit 也不豁免**。把 `feature/*`
   支线以 merge commit 合进 `dev` 时,merge 提交的正文要带 `Signed-off-by:`(`gh pr merge <号> --merge --body "…"`),
-  否则要到这一步才红,而那时已无法补签。
+  否则要到这一步才红,而那时已无法补签。DCO 读的 commits 接口最多返回 250 个提交,超出的部分不会被检查;每发一版就晋升一次
+  `prod`,一个晋升 PR 远到不了这个量。真要攒到接近 250 个提交,先分几次晋升。
 - **冻结契约守卫**:这批改动碰了 `src/constants.ts` 或 `docs/reference.md` 时,同一批里必须有新增的
   `docs/contract-changes/<YYYYMMDD>-<slug>.md`。它在进 `dev` 的那个 PR 里已经要求过,正常情况下自然满足。
 - **合并用 merge commit**:`gh pr merge <PR 号> -R "$REPO" --merge --body "<一句说明>"`,`--body` 末尾同样带一行
@@ -97,6 +101,9 @@ git clone --quiet "https://github.com/$REPO.git" "$P"
 git -C "$P" switch --detach "v$V"
 (cd "$P" && npm ci && npm run gates && npm publish)          # 预发布改用 npm publish --tag next(§8)
 ```
+
+`npm run gates` 的最后一步是 `npm audit --audit-level=high`:发版 PR 合入之后才出的 advisory 也会让它在这里红,`npm publish`
+就不会执行。照 §2 的前置条件处理:停下,先修依赖,不要绕过 gates 去发布。
 
 `npm publish` 在打包之前先跑 `prepublishOnly`,即 `scripts/prepublish-check.mjs`。下面任何一项不过就不发布:
 
