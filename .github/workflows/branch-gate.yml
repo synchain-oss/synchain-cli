@@ -1,14 +1,14 @@
 name: Branch Gate
 
-# 晋升链(v1 只有 dev 一条长期分支):
+# 晋升链(已启用 dev→prod;不设 stage):
 #   feat/* | feature/*  ->  dev            (same-repo)
 #   任意分支名(除长期分支名) -> dev        (fork PR)
+#   dev                 ->  prod           (只收本仓的 dev;发版 tag vX.Y.Z 只打在 prod 上,见 docs/RELEASING.md)
 # 子 PR(base=feature/*)故意不受此门禁约束。
-# 发版里程碑再打开下面被注释的 prod/stage 规则。
 
 on:
   pull_request:
-    branches: [dev]                     # 发版后改为 [prod, stage, dev]
+    branches: [dev, prod]               # 不设 stage:prod 只收 dev(下面规则 ⓪)
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -33,6 +33,16 @@ jobs:
           THIS_REPO: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
         run: |
+          # ⓪ base=prod:只收本仓的 dev(发版晋升),对机器人 PR / fork PR 同样适用。放在 ① ② 之前:
+          #    那两条放行是为「PR 到 dev」设计的,排在它们后面的话,fork / dependabot 开到 prod 的 PR
+          #    会在 ① ② 处 exit 0,本规则形同虚设。fork 的 head 即使叫 dev 也不是本仓的 dev,故连仓名一起比。
+          if [ "$BASE" = "prod" ]; then
+            if [ "$HEAD_REPO" != "$THIS_REPO" ] || [ "$HEAD" != "dev" ]; then
+              echo "::error::Only 'dev' of $THIS_REPO can merge into 'prod'. Got: '$HEAD_REPO:$HEAD'"
+              exit 1
+            fi
+          fi
+
           # ① 机器人 PR 先放行命名规则:dependabot 的 head 形如
           #    dependabot/github_actions/actions-checkout-5,永远不匹配 feat/*|feature/*。
           #    不放行的话每条依赖升级 PR 都会被 required check 红叉,只能靠 admin bypass
@@ -61,9 +71,6 @@ jobs:
               *) echo "::error::Only 'feat/*' or 'feature/*' can merge into 'dev'. Got: '$HEAD'"; exit 1 ;;
             esac
           fi
-          # --- 发版后启用 ---
-          # if [ "$BASE" = "prod" ] && [ "$HEAD" != "stage" ] && [ "$HEAD" != "dev" ]; then ... fi
-          # if [ "$BASE" = "stage" ] && [ "$HEAD" != "dev" ]; then ... fi
           echo "Branch gate passed: '$HEAD' -> '$BASE'"
 
       # DCO —— 本项目把 Signed-off-by 定为贡献前提(CONTRIBUTING.md §2),而 PR 模板里的勾选框是纯自觉。
