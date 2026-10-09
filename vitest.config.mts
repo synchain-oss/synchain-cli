@@ -6,6 +6,10 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.ts", "src/__tests__/**/*.ts"],
     coverage: {
       provider: "v8",
+      // vitest 4 起没有 coverage.all:没被任何测试 import 的文件,只有命中 include 才会进报告、
+      // 才会被阈值卡住。这行 include 因此是承重的,不能删。
+      // vitest 4 的 v8 覆盖率改用 AST 感知的源码映射,同一套测试量出的百分比比 vitest 3 低
+      // (口径更严,不是测试变少);阈值不变。
       include: ["src/**/*.ts"],
       // 排除不可单元测试的交互式/退出路径(只卡纯逻辑,口径见 CLAUDE.md §8):
       //   - src/util/prompt.ts     交互式 prompts(包装 prompts 库,依赖真实 TTY)
