@@ -69,7 +69,7 @@ npm audit --audit-level=high
 | `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
 | `branch-gate` | `ubuntu-latest` | PR → dev、prod | 分支命名(base = prod 只放行本仓 dev)+ DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
 | `claude-review` / `deepseek-review` | `ubuntu-latest` | same-repo PR | 二选一 enable;fork PR 不跑 |
-| `pr-agent` | `ubuntu-latest` | same-repo PR | docker action,必须 latest;fork PR 不跑 |
+| `pr-agent` | `ubuntu-latest` | same-repo PR → dev | docker action,必须 latest;子 PR(base = feature/*)不跑;fork PR 不跑 |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
 
 成本纪律:runner 就低不就高;按量计费 bot 克制。
