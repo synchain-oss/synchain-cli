@@ -44,7 +44,7 @@ jobs:
         run: |
           # 用 git 索引判断(mode 120000 = 符号链接),不依赖工作树;pipefail 让 git 出错时本步失败,而不是当作"没有符号链接"放行。
           set -o pipefail
-          symlinks=$(git ls-files -s | awk '$1 == "120000" {print $4}')
+          symlinks=$(git ls-files -s | awk -F'\t' '$1 ~ /^120000 / {print $2}')
           if [ -n "$symlinks" ]; then
             # 文件名是不可信文本:打印期间停用 workflow 命令解析,防止文件名被当成 ::命令:: 执行。
             stop_token=$(openssl rand -hex 16)
@@ -57,6 +57,9 @@ jobs:
             echo "::error::该 PR 含符号链接,按安全策略不做 AI 审查,请维护者本地人工审。"
             exit 1
           fi
+          # 记下检查时的提交:review-dispatch 在 action 之后用它做事后核对(见该文件的 Verify reviewed tree 步骤);
+          # 三份前置步骤逐字一致,所以都写这一行。
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           # 先删再建:PR 可能自带 .ot-review/ 下的符号链接,> 会顺着链接写到工作区外。
           rm -rf .ot-review
           mkdir .ot-review
@@ -184,6 +187,11 @@ jobs:
           #   (~/.gitconfig、~/.npmrc、~/.git-credentials 等)。路径黑名单要随 runner 镜像与 action 升级复查。
           #   已知前提:/home/runner/work/_actions/**(action 自身的公开代码)对模型可读。
           #   PR 自带的符号链接由前置步骤整体拒绝(见该步骤上方注释),不依赖 deny 规则对链接的判定。
+          # - 已知前提(检查与使用之间的时间差):action 在 tag 模式下会再 fetch 一次 PR head 并检出 PR 分支
+          #   (src/github/operations/branch.ts;fork PR 走 pull/N/head),模型读到的提交未必是前置步骤检查的那一份。
+          #   claude-review / deepseek-review 只跑 same-repo PR,能往 PR 分支推提交的人本就有写权限、可以直接改 workflow,
+          #   这个时间差不给他新的能力,可以接受,不做事后核对;review-dispatch 会审 fork PR,在 action 之后由
+          #   Verify reviewed tree 步骤核对 HEAD 与符号链接。
           # - job 有 actions: read 时,action 还会挂只读的 mcp__github_ci__* 工具(查 CI 状态与 run 详情;
           #   download_job_log 只把日志写到本地磁盘,日志里的 secret 已打码),不构成对外写出口。
           # - 真正挡住推送的最后一道是本 job 拿到的 contents: read —— 不要改成 write。

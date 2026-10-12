@@ -72,7 +72,7 @@ jobs:
         run: |
           # 用 git 索引判断(mode 120000 = 符号链接),不依赖工作树;pipefail 让 git 出错时本步失败,而不是当作"没有符号链接"放行。
           set -o pipefail
-          symlinks=$(git ls-files -s | awk '$1 == "120000" {print $4}')
+          symlinks=$(git ls-files -s | awk -F'\t' '$1 ~ /^120000 / {print $2}')
           if [ -n "$symlinks" ]; then
             # 文件名是不可信文本:打印期间停用 workflow 命令解析,防止文件名被当成 ::命令:: 执行。
             stop_token=$(openssl rand -hex 16)
@@ -85,6 +85,9 @@ jobs:
             echo "::error::该 PR 含符号链接,按安全策略不做 AI 审查,请维护者本地人工审。"
             exit 1
           fi
+          # 记下检查时的提交:review-dispatch 在 action 之后用它做事后核对(见该文件的 Verify reviewed tree 步骤);
+          # 三份前置步骤逐字一致,所以都写这一行。
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           # 先删再建:PR 可能自带 .ot-review/ 下的符号链接,> 会顺着链接写到工作区外。
           rm -rf .ot-review
           mkdir .ot-review
@@ -105,6 +108,7 @@ jobs:
       # 末尾必带同一份「不可信数据声明」防注入结尾(CLAUDE.md §0 第 5 条)。
       # 本 workflow 的 track_progress 在 issue_comment 事件上同样走 tag 模式,工具边界的理由见 claude_args 上方注释。
       # 同步范围只到 prompt、工具边界与前置步骤:claude_args 里的 --model 各 workflow 自选,不跟真源走。
+      # action 之后的 Verify reviewed tree 与 Report symlink refusal 只在本 workflow(会检出 fork PR 代码),不在同步范围。
       - uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # main, Claude Code 2.1.280
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -204,6 +208,11 @@ jobs:
           #   (~/.gitconfig、~/.npmrc、~/.git-credentials 等)。路径黑名单要随 runner 镜像与 action 升级复查。
           #   已知前提:/home/runner/work/_actions/**(action 自身的公开代码)对模型可读。
           #   PR 自带的符号链接由前置步骤整体拒绝(见该步骤上方注释),不依赖 deny 规则对链接的判定。
+          # - 已知前提(检查与使用之间的时间差):action 在 tag 模式下会再 fetch 一次 PR head 并检出 PR 分支
+          #   (src/github/operations/branch.ts;fork PR 走 pull/N/head),模型读到的提交未必是前置步骤检查的那一份。
+          #   claude-review / deepseek-review 只跑 same-repo PR,能往 PR 分支推提交的人本就有写权限、可以直接改 workflow,
+          #   这个时间差不给他新的能力,可以接受,不做事后核对;review-dispatch 会审 fork PR,在 action 之后由
+          #   Verify reviewed tree 步骤核对 HEAD 与符号链接。
           # - job 有 actions: read 时,action 还会挂只读的 mcp__github_ci__* 工具(查 CI 状态与 run 详情;
           #   download_job_log 只把日志写到本地磁盘,日志里的 secret 已打码),不构成对外写出口。
           # - 真正挡住推送的最后一道是本 job 拿到的 contents: read —— 不要改成 write。
@@ -213,10 +222,35 @@ jobs:
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Glob,Grep"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Agent,Task,RemoteTrigger,CronCreate,CronDelete,CronList,PushNotification,SendMessage,ScheduleWakeup,Monitor,Workflow,Skill,Read(./.git/**),Read(//home/runner/work/**/.git/**),Read(//proc/**),Read(//sys/**),Read(//run/**),Read(//var/run/**),Read(//tmp/**),Read(//etc/**),Read(//home/runner/work/_temp/**),Read(//home/runner/actions-runner/**),Read(//home/runner/.*/**),Read(//home/runner/.*)"
 
+      # 事后核对,堵检查与使用之间的时间差:action 在 tag 模式下会再 fetch 一次 PR head 并检出 PR 分支
+      # (src/github/operations/branch.ts;fork PR 走 pull/N/head),前置步骤检查的提交未必是模型读到的那一份。
+      # action 跑完后再看一次:HEAD 与前置步骤记下的提交不同,或索引里出现 mode 120000(符号链接),
+      # 就用固定文本回帖并判红(不回显任何 PR 内容)。git 本身出错也按"不可信"处理。
+      # always():action 失败或被取消也核对;前置步骤没通过时 action 不会运行,不需要核对。
+      - name: Verify reviewed tree
+        if: always() && steps.prepare.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          CHECKED_HEAD: ${{ steps.prepare.outputs.head }}
+        run: |
+          set -o pipefail
+          reviewed_head=$(git rev-parse HEAD) || reviewed_head=""
+          symlinks=$(git ls-files -s | awk -F'\t' '$1 ~ /^120000 / {print $2}') || symlinks="git ls-files failed"
+          echo "checked head:  $CHECKED_HEAD"
+          echo "reviewed head: $reviewed_head"
+          if [ -z "$CHECKED_HEAD" ] || [ "$reviewed_head" != "$CHECKED_HEAD" ] || [ -n "$symlinks" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "审查期间 PR head 发生了变化或出现了符号链接,本次 AI 审查结论不可信,请维护者人工复核。"
+            echo "::error::审查期间 PR head 发生了变化或出现了符号链接,本次 AI 审查结论不可信,请维护者人工复核。"
+            exit 1
+          fi
+
       # 前置步骤因符号链接中止时,用固定文本回帖告知(与上面 workflows 断言的回帖同一写法;不回显任何 PR 内容)。
-      # 只认前置步骤写出的 symlinks=true,其他原因的失败不在这里回帖。
+      # 只在前置步骤本身失败、且失败原因是它写出的 symlinks=true 时回帖;其他步骤或其他原因的失败不在这里回帖
+      # (Verify reviewed tree 判红时自己回帖,那时前置步骤是 success,本步不会重复回帖)。
       - name: Report symlink refusal
-        if: failure() && steps.prepare.outputs.symlinks == 'true'
+        if: failure() && steps.prepare.outcome == 'failure' && steps.prepare.outputs.symlinks == 'true'
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: |
           gh pr comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
