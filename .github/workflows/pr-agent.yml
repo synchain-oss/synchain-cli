@@ -17,8 +17,9 @@ jobs:
   pr-agent:
     # 只在 base = dev 的 PR 上跑。用 job 级 if 判断 base,而不是 on.pull_request.branches ——
     # 被触发器过滤掉的 PR 不产生 check run,若分支保护把本 workflow 列为必需检查,PR 会一直停在
-    # 等待状态;job 被 if 跳过时报告为 skipped,满足必需检查。scvb 的 feature/v1 已经把 pr-agent
-    # 列为必需检查,本仓 feature/extraction 目前无分支保护,改成 job 级是为了与兄弟仓一致。
+    # 等待状态;job 被 if 跳过时报告为 skipped,满足必需检查。本仓 feature/extraction 目前无分支
+    # 保护,但一旦将来把 pr-agent 列为必需检查,触发器级过滤就会让 PR 永远停在等待状态 —— 所以
+    # 现在就按 job 级写,与同款仓库保持一致。
     if: >
       github.event.pull_request.base.ref == 'dev' &&
       github.event.pull_request.draft == false &&
@@ -66,6 +67,10 @@ jobs:
           # 不是 id 的一部分,而这个 id 本身就是 1M 上下文(实测约 96 万 token 输入通过、约 107 万被拒)。
           config.model: anthropic/deepseek-v4.1-flash
           config.fallback_models: anthropic/deepseek-v4-pro
+          # 下面三项对 fallback 模型同样生效:pr-agent 不会为 fallback 重新夹取窗口。主模型与
+          # fallback 的输出上限都已实测为 393216(网关级限制,超出返回 HTTP 500),但 fallback
+          # deepseek-v4-pro 的**上下文窗口**未经实测,故超大 PR 落到 fallback 时可能被拒 —— 那是
+          # 显式失败(job 报红),不是静默空跑,可以接受;若确认窗口更小,把三项按窗口收窄。
           config.custom_model_max_tokens: 1000000   # 1M 档;换成不带 1M 上下文的 id 时改回 131072
           config.max_model_tokens: 800000           # 输入输出共用 1M 上下文,留出 131072+ 给输出;换 131072 档时三项要一起改,且输入+输出须小于窗口并留余量,如 131072 / 90112 / 32768
           config.max_output_tokens: "131072"        # 注意:v0.39.0 里没有这个键,本版是空操作;真正生效的是上面新加的 DEFAULT_ANTHROPIC_CHAT_MAX_TOKENS(默认只发 4096,带推理会被吃光导致空审查)。保留以便升级 pin 后接上
