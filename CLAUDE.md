@@ -85,7 +85,7 @@ CLI 与 Synchain 主应用之间没有代码级 import,只有一份运行时 HTT
 | 运行时 | Node ≥ 20、npm |
 | 本地 gates | npm ci / typecheck / test --coverage / build / pack --dry-run / audit(§2) |
 | 合规扫描 | 工作树:`gitleaks detect --no-git --redact --config .gitleaks.toml`;git 历史(HEAD 可达祖先):同命令去掉 `--no-git`(需完整 clone)。版本钉 .gitleaks-version。另 `pipx run reuse lint`。三条都不进 npm run gates 字符串 |
-| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、DEEPSEEK_KEY(review bot)。发布目前由维护者本地手工执行,不经 CI(仓内无 publish workflow);`npm publish` 先跑 `prepublishOnly`(`scripts/prepublish-check.mjs`),流程见 docs/RELEASING.md |
+| CI secrets | CLAUDE_CODE_OAUTH_TOKEN、OPENCODE_GO_API_KEY_FOR_REVIEW(review bot;仓库级 secret,2026-10-18 起由 `DEEPSEEK_KEY` 换成 OpenCode Go 网关 `https://opencode.ai/zen/go` 的 key)。发布目前由维护者本地手工执行,不经 CI(仓内无 publish workflow);`npm publish` 先跑 `prepublishOnly`(`scripts/prepublish-check.mjs`),流程见 docs/RELEASING.md |
 | 为什么强调本地 | 子 PR 不触发完整 CI;npm audit 与覆盖率阈值是 CI 硬门禁,本地先过 |
 
 ## 7. 安全铁律
