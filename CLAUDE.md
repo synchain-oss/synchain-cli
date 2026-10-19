@@ -69,7 +69,7 @@ npm audit --audit-level=high
 | `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
 | `branch-gate` | `ubuntu-latest` | PR → dev、prod | 分支命名(base = prod 只放行本仓 dev)+ DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
 | `claude-review` | 中央 workflow(`Synchain-oss/ci-workflows`),`ubuntu-slim` | same-repo PR(所有 base,晋升 PR dev → prod 除外) | 薄调用方:只放本仓 `focus` / `extra_prompt`;检查名 `claude-pr-review / review`;fork PR 不跑 |
-| `deepseek-review` | 中央 workflow,`ubuntu-slim` | **仅 `workflow_dispatch`**(Actions → Run workflow → 填 PR 号) | Claude 额度用完时的手动备用;不会自动跑,保持 disable;检查名 `deepseek-pr-review / review` |
+| `deepseek-review` | 中央 workflow,`ubuntu-latest`(45 分钟) | **仅 `workflow_dispatch`**(Actions → Run workflow → 填 PR 号) | Claude 额度用完时的手动备用;不会自动跑,保持 disable;检查名 `deepseek-pr-review / review` |
 | `pr-agent` | 中央 workflow,`ubuntu-latest`(`docker run`) | same-repo PR → dev | 薄调用方:调用方只放 `ignore_globs`;镜像按 digest 钉在中央,无备用模型;子 PR(base = feature/*)不跑;fork PR 不跑;检查名 `pr-agent / pr-agent` |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
 
