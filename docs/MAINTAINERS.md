@@ -24,7 +24,7 @@
 
 ## runner 版本
 
-本仓自己的 job 固定 `runs-on: ubuntu-latest`,不钉具体镜像版本(如 `ubuntu-24.04`)。
+本仓自己的 job 用滚动标签 `ubuntu-latest`(`ci` 的 Windows 格用 `windows-latest`),不钉具体镜像版本(如 `ubuntu-24.04`)。
 调用 `Synchain-oss/ci-workflows` 的三个 review bot 不写 `runs-on`,runner 由中央 workflow 决定
 (`claude-review` 用 `ubuntu-slim`,`pr-agent` 与 `deepseek-review` 用 `ubuntu-latest`)。
 
