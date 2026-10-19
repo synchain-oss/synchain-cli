@@ -69,11 +69,11 @@ npm audit --audit-level=high
 | `ci` | `ubuntu-latest` × node 20/22 + `windows-latest` × node 20 | PR → dev;push → dev、feature/** | jobs:checks / smoke / no-stale-refs / audit / compliance / secret-history / 聚合 cli-gate。fork PR 允许运行(无 secrets) |
 | `branch-gate` | `ubuntu-latest` | PR → dev、prod | 分支命名(base = prod 只放行本仓 dev)+ DCO + 冻结契约 path guard;fork PR 免除命名但不得用保留长期分支名 |
 | `claude-review` | 中央 workflow(`Synchain-oss/ci-workflows`),`ubuntu-slim` | same-repo PR(所有 base,晋升 PR dev → prod 除外) | 薄调用方:只放本仓 `focus` / `extra_prompt`;检查名 `claude-pr-review / review`;fork PR 不跑 |
-| `deepseek-review` | 中央 workflow,`ubuntu-latest`(45 分钟) | **仅 `workflow_dispatch`**(Actions → Run workflow → 填 PR 号) | Claude 额度用完时的手动备用;不会自动跑,保持 disable;检查名 `deepseek-pr-review / review` |
+| `deepseek-review` | 中央 workflow,`ubuntu-latest`(45 分钟) | **仅 `workflow_dispatch`** | Claude 额度用完时的手动备用;平时保持 disable,不会自动跑。用法:先 `gh workflow enable "DeepSeek PR Review"`,再 Actions → Run workflow → 填 PR 号,用完 `gh workflow disable "DeepSeek PR Review"`;检查名 `deepseek-pr-review / review` |
 | `pr-agent` | 中央 workflow,`ubuntu-latest`(`docker run`) | same-repo PR → dev | 薄调用方:调用方只放 `ignore_globs`;镜像按 digest 钉在中央,无备用模型;子 PR(base = feature/*)不跑;fork PR 不跑;检查名 `pr-agent / pr-agent` |
 | `review-dispatch` | `ubuntu-latest` | `issue_comment`(`/review`,评论者 ∈ {OWNER,MEMBER,COLLABORATOR}) | fork PR 唯一 AI 审查通道 |
 
-三个 review bot 文件都是调用 `Synchain-oss/ci-workflows` 的薄调用方,按 **commit SHA** 引用(行尾注释 `# v1.1.0`;§0 第 3 条不放行 `@v1` 这类可变 ref),升级中央版本 = 三处一起改 SHA。模型、工具边界、符号链接拒审、diff 预取、draft / fork / dependabot 与晋升 PR 跳过、并发与超时都在中央;secret 由调用方显式传入(`secrets: inherit` 跨 owner 无效)。`review-dispatch` 没有迁到中央(中央只接 `pull_request`),仍自带一份 prompt 与 `claude_args`;改 `claude-review.yml` 的 `focus` / `extra_prompt` 时要手动同步它。
+三个 review bot 文件都是调用 `Synchain-oss/ci-workflows` 的薄调用方,按 **commit SHA** 引用(行尾注释 `# v1.3.1`;§0 第 3 条不放行 `@v1` 这类可变 ref),升级中央版本 = 三处一起改 SHA。模型、工具边界、符号链接拒审、diff 预取、draft / fork / dependabot 与晋升 PR 跳过、并发与超时都在中央;secret 由调用方逐个显式传入,只传该 workflow 用到的那一个(最小权限,不用 `secrets: inherit`)。`review-dispatch` 没有迁到中央(中央只接 `pull_request`),仍自带一份 prompt 与 `claude_args`;改 `claude-review.yml` 的 `focus` / `extra_prompt` 时要手动同步它。
 
 成本纪律:runner 就低不就高;按量计费 bot 克制。
 

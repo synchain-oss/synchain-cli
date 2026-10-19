@@ -24,7 +24,9 @@
 
 ## runner 版本
 
-所有 workflow 固定 `runs-on: ubuntu-latest`,不钉具体镜像版本(如 `ubuntu-24.04`)。
+本仓自己的 job 用滚动标签 `ubuntu-latest`(`ci` 的 Windows 格用 `windows-latest`),不钉具体镜像版本(如 `ubuntu-24.04`)。
+调用 `Synchain-oss/ci-workflows` 的三个 review bot 不写 `runs-on`,runner 由中央 workflow 决定
+(`claude-review` 用 `ubuntu-slim`,`pr-agent` 与 `deepseek-review` 用 `ubuntu-latest`)。
 
 理由:本仓的 job 只有 Node 构建/测试与 shell 断言,没有对镜像版本敏感的步骤 —— 钉版本
 买不到可复现性上的多少东西,却要跟着 runner image 的弃用节奏定期手工升级,单人维护下
