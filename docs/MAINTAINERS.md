@@ -40,7 +40,7 @@ run 日志顶部记着当次的镜像版本。
 
 - `CLAUDE.md` §0 安全铁律。**第 1-3 条是通用禁令,逐字同步**;第 4、5 条为了让外部读者
   读得懂,已经改成自含说明,里面带了本仓专有的锚点(`review-dispatch.yml`、
-  `claude-review.yml` 的 prompt 末尾),那两条只要求**语义一致**,锚点各仓按自己的文件名写。
+  `claude-review.yml` 的 `extra_prompt` 末尾),那两条只要求**语义一致**,锚点各仓按自己的文件名写。
 - `.github/workflows/branch-gate.yml` 的 `branch-gate` job。
 
 **待同步(同步完请删掉本段)**:清理内部编号的那次改写动了 `CLAUDE.md` §0 第 4、5 条与

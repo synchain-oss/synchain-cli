@@ -103,11 +103,14 @@ jobs:
           wc -c .ot-review/*
 
       # prompt、工具边界(claude_args 里的 --tools / --allowedTools / --disallowedTools)与上面的
-      # Prepare PR context 步骤取自 claude-review.yml(唯一真源),逐字相同 —— 只有 `PR NUMBER:` 那行
-      # 与 PR_NUMBER 环境变量必须按事件类型取 github.event.issue.number(本 workflow 是 issue_comment 事件)。
+      # Prepare PR context 步骤是本文件自带的一份。以前它们取自 claude-review.yml(唯一真源);claude-review.yml
+      # 现已改成调用 Synchain-oss/ci-workflows 中央可复用 workflow 的薄调用方(审查要点在它的 focus / extra_prompt 里,
+      # 工具边界在中央 claude-review.yml),不再有可同步的内联真源。改审查要点时手动同步这里的 prompt,
+      # 中央工具边界变动时对照更新这里的 claude_args。
+      # `PR NUMBER:` 那行与 PR_NUMBER 环境变量必须按事件类型取 github.event.issue.number(本 workflow 是 issue_comment 事件)。
       # 末尾必带同一份「不可信数据声明」防注入结尾(CLAUDE.md §0 第 5 条)。
       # 本 workflow 的 track_progress 在 issue_comment 事件上同样走 tag 模式,工具边界的理由见 claude_args 上方注释。
-      # 同步范围只到 prompt、工具边界与前置步骤:claude_args 里的 --model 各 workflow 自选,不跟真源走。
+      # 手动同步的范围只到 prompt、工具边界与前置步骤:claude_args 里的 --model 各 workflow 自选。
       # action 之后的 Verify reviewed tree 与 Report symlink refusal 只在本 workflow(会检出 fork PR 代码),不在同步范围。
       - uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # main, Claude Code 2.1.280
         with:
